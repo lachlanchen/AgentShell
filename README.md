@@ -38,6 +38,15 @@ codex --account personal login
 codex --account lab login
 ```
 
+Authentication is separate by default. History can remain private or use one shared Codex index:
+
+```bash
+agent-profile history personal shared
+agent-profile history lab shared
+```
+
+Shared mode is convenient when every account should resume the same local sessions. Keep company/lab profiles private when policy or confidentiality requires separated conversation indexes.
+
 Use each account directly:
 
 ```bash
@@ -57,6 +66,14 @@ codexr
 codexmv
 exit
 ```
+
+Show the active profile from an AgentShell terminal:
+
+```bash
+agentshell -v
+```
+
+It reports the current account, saved-login state, history mode, Codex home, SQLite home, and working directory. Outside an AgentShell terminal it clearly reports `none (ordinary shell)`.
 
 The same profile can be opened from any project directory. `pwd` is retained exactly.
 
@@ -111,6 +128,9 @@ agent-profile show lab
 agent-profile status lab
 agent-profile login lab codex
 agent-profile aliases lab
+agent-profile history lab
+agent-profile history lab shared
+agent-profile history lab private
 ```
 
 State lives under:
@@ -124,7 +144,8 @@ See [Architecture and safety](docs/architecture.md) and [Provider adapters](docs
 ## Design guarantees
 
 - The current directory is never copied, mounted, or changed.
-- Account credentials and conversation state are not copied from the default profile.
+- Account credentials are never copied from the default profile.
+- Conversation indexes are private by default and shareable only through an explicit per-profile history mode.
 - Existing `codex`, `codexr`, and `codexmv` behavior is unchanged without an account option.
 - Account creation is idempotent.
 - Generated aliases refuse to overwrite unrelated files.

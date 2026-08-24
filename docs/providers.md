@@ -4,6 +4,17 @@
 
 Codex is the primary integration. Each account gets independent authentication, SQLite state, logs, and sessions through `CODEX_HOME` and `CODEX_SQLITE_HOME`.
 
+Each profile chooses one of two SQLite modes:
+
+- `private`: profile-local index; strongest separation and the default.
+- `shared`: one existing Codex index for cross-account `codexr` and `codexmv` workflows.
+
+```bash
+agent-profile history personal shared
+agent-profile history company private
+agentshell status personal
+```
+
 On this workstation, AgentShell delegates to the existing `codex/codexr/codexmv` dispatcher after activating the account. That preserves the fast session picker, `/rename` support, current-directory filtering, and safe cwd migration journals.
 
 ```bash

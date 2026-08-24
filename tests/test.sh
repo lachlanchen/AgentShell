@@ -60,6 +60,12 @@ grep -q '^account=alpha$' "$AGENT_TEST_OUTPUT"
 grep -q '^openai_api_key=unset$' "$AGENT_TEST_OUTPUT"
 grep -q '^arg=--model$' "$AGENT_TEST_OUTPUT"
 grep -q '^arg=hello world$' "$AGENT_TEST_OUTPUT"
+grep -q "^sqlite_home=$profile/codex-home$" "$AGENT_TEST_OUTPUT"
+
+agent-profile history alpha shared >/dev/null
+agent-alpha-codex --version >/dev/null
+grep -q "^sqlite_home=$HOME/.codex$" "$AGENT_TEST_OUTPUT"
+grep -q '^History mode:   shared$' <<<"$(agentshell status alpha)"
 
 # Optional Bash interception changes only calls that explicitly name an account.
 # shellcheck disable=SC1091
@@ -67,6 +73,7 @@ grep -q '^arg=hello world$' "$AGENT_TEST_OUTPUT"
 codex --account beta --version >/dev/null
 grep -q '^account=beta$' "$AGENT_TEST_OUTPUT"
 grep -q '^arg=--version$' "$AGENT_TEST_OUTPUT"
+grep -q "^sqlite_home=$AGENT_SHELL_HOME/profiles/beta/codex-home$" "$AGENT_TEST_OUTPUT"
 test "$profile" != "$AGENT_SHELL_HOME/profiles/beta"
 
 profile_list_output="$(agent-profile list)"

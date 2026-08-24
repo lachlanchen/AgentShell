@@ -3,6 +3,7 @@
 
 set -euo pipefail
 
+AGENT_SHELL_VERSION="0.2.0"
 agent_shell_program="$(basename -- "$0")"
 agent_shell_self="$(readlink -f -- "${BASH_SOURCE[0]}")"
 agent_shell_data_home="${AGENT_SHELL_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/agentshell}"
@@ -22,8 +23,10 @@ AgentShell — separate AI CLI accounts by named terminal profile
 Usage:
   agentshell ACCOUNT
   agentshell --account ACCOUNT [-- COMMAND [ARG...]]
+  agentshell -v | status [ACCOUNT]
   agent-run --account ACCOUNT TOOL [ARG...]
   agent-profile create|list|show|status|login|aliases ACCOUNT [TOOL]
+  agent-profile history ACCOUNT [private|shared]
 
 Codex shortcuts:
   agent-codex   --account ACCOUNT [CODEX_ARG...]
@@ -57,6 +60,49 @@ agent_shell_validate_name() {
 
 agent_shell_profile_root() {
   printf '%s/%s\n' "$agent_shell_profiles_dir" "$1"
+}
+
+agent_shell_profile_value() {
+  local name="$1" key="$2" fallback="${3:-}" root value=""
+  root="$(agent_shell_profile_root "$name")"
+  if [ -f "$root/profile.conf" ]; then
+    value="$(awk -F= -v wanted="$key" '$1 == wanted { sub(/^[^=]*=/, ""); print; exit }' "$root/profile.conf")"
+  fi
+  printf '%s\n' "${value:-$fallback}"
+}
+
+agent_shell_set_profile_value() {
+  local name="$1" key="$2" value="$3" root config temporary
+  root="$(agent_shell_profile_root "$name")"
+  config="$root/profile.conf"
+  temporary="$(mktemp "$root/.profile.conf.XXXXXX")"
+  awk -F= -v wanted="$key" '$1 != wanted { print }' "$config" > "$temporary"
+  printf '%s=%s\n' "$key" "$value" >> "$temporary"
+  chmod 600 "$temporary"
+  mv -- "$temporary" "$config"
+}
+
+agent_shell_history_mode() {
+  local name="$1" mode
+  mode="$(agent_shell_profile_value "$name" codex_history private)"
+  case "$mode" in
+    private|shared) printf '%s\n' "$mode" ;;
+    *) printf 'private\n' ;;
+  esac
+}
+
+agent_shell_shared_sqlite_home() {
+  printf '%s\n' "${AGENT_SHELL_SHARED_CODEX_SQLITE_HOME:-${AGENT_SHELL_BASE_CODEX_HOME:-$HOME/.codex}}"
+}
+
+agent_shell_codex_sqlite_home() {
+  local name="$1" root
+  root="$(agent_shell_profile_root "$name")"
+  if [ "$(agent_shell_history_mode "$name")" = "shared" ]; then
+    agent_shell_shared_sqlite_home
+  else
+    printf '%s/codex-home\n' "$root"
+  fi
 }
 
 agent_shell_safe_link() {
@@ -147,6 +193,7 @@ agent_shell_create_profile() {
       printf 'name=%s\n' "$name"
       printf 'format_version=1\n'
       printf 'created_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      printf 'codex_history=private\n'
     } > "$root/profile.conf"
     cat > "$root/env.sh" <<'EOF'
 # Optional account-specific environment variables.
@@ -178,10 +225,13 @@ agent_shell_clear_inherited_auth() {
 }
 
 agent_shell_activate_profile() {
-  local name="$1" root env_file
+  local name="$1" root env_file history_mode sqlite_home
   agent_shell_create_profile "$name"
   root="$(agent_shell_profile_root "$name")"
   env_file="$root/env.sh"
+  history_mode="$(agent_shell_history_mode "$name")"
+  sqlite_home="$(agent_shell_codex_sqlite_home "$name")"
+  mkdir -p -- "$sqlite_home"
 
   agent_shell_clear_inherited_auth
   if [ -r "$env_file" ]; then
@@ -194,8 +244,10 @@ agent_shell_activate_profile() {
   export AGENT_SHELL_ACCOUNT="$name"
   export AGENT_SHELL_PROFILE_ROOT="$root"
   export AGENT_SHELL_PROFILE_ENV="$env_file"
+  export AGENT_SHELL_CODEX_HISTORY_MODE="$history_mode"
+  export AGENT_SHELL_CODEX_SQLITE_HOME="$sqlite_home"
   export CODEX_HOME="$root/codex-home"
-  export CODEX_SQLITE_HOME="$root/codex-home"
+  export CODEX_SQLITE_HOME="$sqlite_home"
   export CLAUDE_CONFIG_DIR="$root/claude-home"
   export GEMINI_CLI_HOME="$root/gemini-home"
   export COPILOT_HOME="$root/copilot-home"
@@ -216,6 +268,11 @@ agent_shell_run_tool() {
   local name="$1" tool="$2" command_path wrapper
   shift 2
   agent_shell_activate_profile "$name"
+
+  if [ "${AGENT_SHELL_QUIET:-0}" != "1" ] && [ -t 2 ]; then
+    printf 'AgentShell [%s] • %s • history=%s • cwd=%s\n' \
+      "$name" "$tool" "$AGENT_SHELL_CODEX_HISTORY_MODE" "$(pwd -P)" >&2
+  fi
 
   wrapper="${AGENT_SHELL_CODEX_WRAPPER:-$HOME/scripts/codex_wrapper.sh}"
   case "$tool" in
@@ -271,7 +328,7 @@ if [ -r "${AGENT_SHELL_PROFILE_ENV:-}" ]; then
 fi
 
 export CODEX_HOME="$AGENT_SHELL_PROFILE_ROOT/codex-home"
-export CODEX_SQLITE_HOME="$AGENT_SHELL_PROFILE_ROOT/codex-home"
+export CODEX_SQLITE_HOME="$AGENT_SHELL_CODEX_SQLITE_HOME"
 export CLAUDE_CONFIG_DIR="$AGENT_SHELL_PROFILE_ROOT/claude-home"
 export GEMINI_CLI_HOME="$AGENT_SHELL_PROFILE_ROOT/gemini-home"
 export COPILOT_HOME="$AGENT_SHELL_PROFILE_ROOT/copilot-home"
@@ -292,8 +349,8 @@ agent_shell_open_shell() {
 }
 
 agent_shell_list_profiles() {
-  local name root codex_auth
-  printf '%-24s %-12s %s\n' 'ACCOUNT' 'CODEX LOGIN' 'STATE'
+  local name root codex_auth history_mode
+  printf '%-24s %-12s %-9s %s\n' 'ACCOUNT' 'CODEX LOGIN' 'HISTORY' 'STATE'
   if [ ! -d "$agent_shell_profiles_dir" ]; then
     return 0
   fi
@@ -302,24 +359,72 @@ agent_shell_list_profiles() {
     root="$(agent_shell_profile_root "$name")"
     codex_auth='not logged in'
     [ -s "$root/codex-home/auth.json" ] && codex_auth='saved'
-    printf '%-24s %-12s %s\n' "$name" "$codex_auth" "$root"
+    history_mode="$(agent_shell_history_mode "$name")"
+    printf '%-24s %-12s %-9s %s\n' "$name" "$codex_auth" "$history_mode" "$root"
   done < <(find "$agent_shell_profiles_dir" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | LC_ALL=C sort)
 }
 
 agent_shell_show_profile() {
-  local name="$1" root
+  local name="$1" root history_mode sqlite_home
   agent_shell_create_profile "$name"
   root="$(agent_shell_profile_root "$name")"
+  history_mode="$(agent_shell_history_mode "$name")"
+  sqlite_home="$(agent_shell_codex_sqlite_home "$name")"
   cat <<EOF
 Account:       $name
 Profile root:  $root
 Codex home:    $root/codex-home
+History mode:  $history_mode
+SQLite home:   $sqlite_home
 Claude home:   $root/claude-home
 Gemini home:   $root/gemini-home
 Copilot home:  $root/copilot-home
 Working dir:   $(pwd -P) (unchanged)
 Private env:   $root/env.sh
 EOF
+}
+
+agent_shell_set_history() {
+  local name="$1" mode="${2:-}" sqlite_home
+  agent_shell_create_profile "$name"
+  if [ -z "$mode" ]; then
+    printf '%s\n' "$(agent_shell_history_mode "$name")"
+    return 0
+  fi
+  case "$mode" in
+    private|shared) ;;
+    *) agent_shell_die "history mode must be private or shared" ;;
+  esac
+  agent_shell_set_profile_value "$name" codex_history "$mode"
+  sqlite_home="$(agent_shell_codex_sqlite_home "$name")"
+  mkdir -p -- "$sqlite_home"
+  printf 'AgentShell account %s now uses %s Codex history.\n' "$name" "$mode"
+  printf 'SQLite home: %s\n' "$sqlite_home"
+}
+
+agent_shell_runtime_status() {
+  local requested="${1:-}" account root history_mode sqlite_home login_state
+  printf 'AgentShell %s\n' "$AGENT_SHELL_VERSION"
+  account="$requested"
+  [ -n "$account" ] || account="${AGENT_SHELL_ACCOUNT:-}"
+  if [ -z "$account" ]; then
+    printf 'Current account: none (ordinary shell)\n'
+    printf 'Tip: agentshell ACCOUNT, or agentshell status ACCOUNT\n'
+    return 0
+  fi
+  agent_shell_validate_name "$account"
+  agent_shell_create_profile "$account"
+  root="$(agent_shell_profile_root "$account")"
+  history_mode="$(agent_shell_history_mode "$account")"
+  sqlite_home="$(agent_shell_codex_sqlite_home "$account")"
+  login_state='not logged in'
+  [ -s "$root/codex-home/auth.json" ] && login_state='saved'
+  printf 'Current account: %s\n' "$account"
+  printf 'Codex login:    %s\n' "$login_state"
+  printf 'History mode:   %s\n' "$history_mode"
+  printf 'Codex home:     %s\n' "$root/codex-home"
+  printf 'SQLite home:    %s\n' "$sqlite_home"
+  printf 'Working dir:    %s\n' "$(pwd -P)"
 }
 
 agent_shell_show_aliases() {
@@ -376,6 +481,10 @@ agent_shell_profile_main() {
     aliases)
       [ -n "$name" ] || agent_shell_die 'profile aliases requires ACCOUNT'
       agent_shell_show_aliases "$name"
+      ;;
+    history)
+      [ -n "$name" ] || agent_shell_die 'profile history requires ACCOUNT'
+      agent_shell_set_history "$name" "${3:-}"
       ;;
     status)
       [ -n "$name" ] || agent_shell_die 'profile status requires ACCOUNT'
@@ -449,6 +558,16 @@ agent_shell_main() {
     return
   fi
   case "${1:-}" in
+    -v|--version)
+      shift
+      agent_shell_runtime_status "${1:-}"
+      return
+      ;;
+    status)
+      shift
+      agent_shell_runtime_status "${1:-}"
+      return
+      ;;
     -h|--help|help|'') agent_shell_usage; return ;;
   esac
 
