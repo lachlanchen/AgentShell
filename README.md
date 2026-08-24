@@ -1,188 +1,275 @@
+[English](README.md) · [العربية](i18n/README.ar.md) · [Español](i18n/README.es.md) · [Français](i18n/README.fr.md) · [日本語](i18n/README.ja.md) · [한국어](i18n/README.ko.md) · [Tiếng Việt](i18n/README.vi.md) · [中文 (简体)](i18n/README.zh-Hans.md) · [中文（繁體）](i18n/README.zh-Hant.md) · [Deutsch](i18n/README.de.md) · [Русский](i18n/README.ru.md)
+
+[![LazyingArt banner](https://github.com/lachlanchen/lachlanchen/raw/main/figs/banner.png)](https://github.com/lachlanchen/lachlanchen/blob/main/figs/banner.png)
+
 # AgentShell
 
-Named AI CLI accounts for separate terminals, with one shared working tree.
+*Named AI CLI accounts for separate terminals, sharing one real working tree.*
 
-AgentShell lets a personal terminal, lab terminal, and company terminal use different Codex logins without copying projects or changing Unix users. It is deliberately lighter than Docker: the process stays in the real current directory, while supported CLIs receive separate account, session, and state directories.
+[![Test](https://github.com/lachlanchen/AgentShell/actions/workflows/test.yml/badge.svg)](https://github.com/lachlanchen/AgentShell/actions/workflows/test.yml)
+[![MIT License](https://img.shields.io/badge/license-MIT-22c55e.svg)](LICENSE)
+[![Bash](https://img.shields.io/badge/Bash-dependency--light-4EAA25?logo=gnubash&logoColor=white)](bin/agentshell)
+[![Documentation](https://img.shields.io/badge/docs-complete%20tutorial-2563eb)](docs/tutorial.md)
+[![LazyingArt](https://img.shields.io/badge/home-lazying.art-0EA5E9)](https://lazying.art)
+[![GitHub Sponsors](https://img.shields.io/badge/sponsor-lachlanchen-EA4AAA?logo=githubsponsors)](https://github.com/sponsors/lachlanchen)
 
-## Why
+AgentShell lets personal, laboratory, and company terminals use different Codex logins without copying projects, changing Unix users, or maintaining containers. Each process stays in the current directory while provider-supported environment variables route authentication and state into a named profile.
 
-```text
-same folder
-   ├── terminal A → personal Codex home/login/sessions
-   ├── terminal B → lab Codex home/login/sessions
-   └── terminal C → company Codex home/login/sessions
+## Copy-paste example
+
+First time for an account:
+
+```bash
+# Load the AgentShell functions in this terminal.
+. ~/.bashrc
+
+# Create a label, log that label into Codex, and share existing sessions.
+agent-profile create personal
+codex --account personal login
+agent-profile history personal shared
+
+# Open the session picker with the personal login.
+cd ~/ProjectsLFS/LALACHAN
+codexr --account personal
 ```
 
-Ordinary commands remain ordinary. Account routing only happens when you explicitly use `--account`/`--project`, a generated account command, or an AgentShell subshell.
+Normal daily use in a dedicated terminal:
 
-## Install
+```bash
+. ~/.bashrc
+cd ~/ProjectsLFS/LALACHAN
+agentshell personal
+
+# These now all use the personal account.
+agentshell -v
+codexr
+codex
+
+# Leave the account-specific terminal when finished.
+exit
+```
+
+Use another account in another terminal:
+
+```bash
+. ~/.bashrc
+cd ~/ProjectsLFS/LALACHAN
+agentshell lab
+codex login                 # first use only inside this dedicated shell
+codexr
+```
+
+| Donate | PayPal | Stripe |
+| --- | --- | --- |
+| [![Donate](https://img.shields.io/badge/Donate-LazyingArt-0EA5E9?style=for-the-badge&logo=kofi&logoColor=white)](https://chat.lazying.art/donate) | [![PayPal](https://img.shields.io/badge/PayPal-RongzhouChen-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/RongzhouChen) | [![Stripe](https://img.shields.io/badge/Stripe-Donate-635BFF?style=for-the-badge&logo=stripe&logoColor=white)](https://buy.stripe.com/aFadR8gIaflgfQV6T4fw400) |
+
+## One folder, several identities
+
+```text
+                         same project folder
+                    /home/user/Projects/MyApp
+                                │
+              ┌─────────────────┼─────────────────┐
+              │                 │                 │
+      terminal: personal   terminal: lab    terminal: company
+              │                 │                 │
+       personal login       lab login        company login
+              └─────────────────┴─────────────────┘
+                         shared real files
+```
+
+AgentShell is intentionally lighter than Docker. It separates application state for trusted accounts owned by one Unix user; it is not a filesystem or OS security boundary.
+
+## Why AgentShell
+
+- **Independent authentication:** every label has its own Codex `auth.json` and provider state.
+- **Optional shared history:** accounts may resume one common Codex session index while credentials remain separate.
+- **No workspace copies:** Git repositories, Conda environments, build tools, and files stay exactly where they are.
+- **Native arguments preserved:** models, prompts, sandbox options, search, images, and future CLI flags pass through.
+- **Fast workstation resume:** existing `codexr`, `/rename`, partial-path search, and `codexmv` workflows remain available.
+- **Provider adapters:** Codex is fully integrated; Claude Code, Gemini CLI, and Copilot CLI receive named state roots.
+- **Safe installation:** no root privileges; unrelated commands and profile data are never overwritten.
+
+## Quick start
 
 ```bash
 git clone https://github.com/lachlanchen/AgentShell.git
 cd AgentShell
 ./install.sh
-. ~/.bashrc
-```
+. "$HOME/.bashrc"
 
-No root access or container runtime is required.
-
-## Codex quick start
-
-Create and log in to two independent accounts:
-
-```bash
 agent-profile create personal
-agent-profile create lab
-
 codex --account personal login
-codex --account lab login
+codex --account personal
 ```
 
-Authentication is separate by default. History can remain private or use one shared Codex index:
+For a remote/headless login:
 
 ```bash
-agent-profile history personal shared
-agent-profile history lab shared
+codex --account personal login --device-auth
 ```
 
-Shared mode is convenient when every account should resume the same local sessions. Keep company/lab profiles private when policy or confidentiality requires separated conversation indexes.
+Read the [complete tutorial](docs/tutorial.md) for installation, browser login, account switching, shared/private history, resume, session migration, updates, and troubleshooting.
 
-Use each account directly:
+## Three ways to work
+
+Run one account-aware command:
 
 ```bash
 codex --account personal
-codex --account lab -m gpt-5.6-sol
-codexr --account lab
-codexmv --account lab /old/project /new/project
+codex --account lab -m gpt-5.6-sol "Review this repository"
+codexr --account company --all
 ```
 
-Or dedicate an entire terminal to one account:
+Dedicate a terminal to one account:
 
 ```bash
-agentshell personal
-# Prompt now starts with [agent:personal]. These use personal state:
+cd /path/to/project
+agentshell lab
+
+# The prompt now starts with [agent:lab].
+agentshell -v
 codex
 codexr
-codexmv
 exit
 ```
 
-Show the active profile from an AgentShell terminal:
+Or use generated commands:
 
 ```bash
-agentshell -v
-```
-
-It reports the current account, saved-login state, history mode, Codex home, SQLite home, and working directory. Outside an AgentShell terminal it clearly reports `none (ordinary shell)`.
-
-The same profile can be opened from any project directory. `pwd` is retained exactly.
-
-## Convenience commands
-
-Creating `lab` generates:
-
-```text
-agent-lab-codex
+agent-personal-codex
 agent-lab-codexr
-agent-lab-codexmv
-agent-lab-claude
-agent-lab-gemini
-agent-lab-copilot
+agent-company-codexmv /old/path /new/path
 ```
 
-These are equivalent:
+The AgentShell `--account` option must appear first. Plain `codex`, `codexr`, and `codexmv` retain their existing behavior.
+
+## Private credentials, selectable history
+
+| History mode | Credentials | SQLite resume index | Recommended use |
+|---|---|---|---|
+| `private` | Profile-local | Profile-local | Confidential lab/company separation |
+| `shared` | Profile-local | Shared base index | Resume the same workstation sessions from several accounts |
 
 ```bash
-codex --account lab --version
-agent-codex --account lab --version
-agent-lab-codex --version
-agent-run --account lab codex --version
+agent-profile history personal shared
+agent-profile history company private
+agentshell status personal
 ```
 
-`--project` is an alias for `--account`:
-
-```bash
-codex --project company
-agent-codex --project company
-```
-
-Place the custom account option first. Every remaining option and prompt is forwarded unchanged.
-
-## Other AI CLIs
-
-The profile core already supports the official state-home controls for Claude Code, Gemini CLI, and GitHub Copilot CLI:
-
-```bash
-claude --account lab
-gemini --account personal
-copilot --account company
-```
-
-Inside `agentshell lab`, plain `claude`, `gemini`, and `copilot` use the same named profile. Provider support is intentionally an adapter layer; Codex is the first fully integrated workflow on this workstation.
+Codex documents `CODEX_HOME` as its state root and `CODEX_SQLITE_HOME` as the location for SQLite-backed state. AgentShell uses that supported boundary; it never shares credentials merely to share a resume catalog.
 
 ## Account management
 
 ```bash
+agent-profile create lab
 agent-profile list
 agent-profile show lab
-agent-profile status lab
+agent-profile status lab codex
 agent-profile login lab codex
 agent-profile aliases lab
-agent-profile history lab
-agent-profile history lab shared
-agent-profile history lab private
+
+codex --account lab login status
+codex --account lab logout
+codex --account lab login
 ```
 
-State lives under:
+Inside Codex, `/status` remains the authoritative view of the authenticated identity and running session.
 
-```text
-~/.local/share/agentshell/profiles/ACCOUNT/
-```
-
-See [Architecture and safety](docs/architecture.md) and [Provider adapters](docs/providers.md).
-
-## Design guarantees
-
-- The current directory is never copied, mounted, or changed.
-- Account credentials are never copied from the default profile.
-- Conversation indexes are private by default and shareable only through an explicit per-profile history mode.
-- Existing `codex`, `codexr`, and `codexmv` behavior is unchanged without an account option.
-- Account creation is idempotent.
-- Generated aliases refuse to overwrite unrelated files.
-- Inherited provider API-token variables are cleared by default to prevent one terminal's token from silently defeating account isolation.
-- Existing authored settings and skills can be inherited without sharing provider login state.
-
-AgentShell is account/state separation for one trusted Unix user—not a security sandbox. Every profile has the same filesystem permissions as that user.
-
-## Validation
+## Resume and migrate sessions
 
 ```bash
-bash -n bin/agentshell shell/agentshell.bash install.sh tests/test.sh
-bash tests/test.sh
+# Exact current directory
+codexr --account personal
+
+# All directories or partial-path search
+codexr --account personal --all
+codexr --account personal --non-strict ProjectName
+
+# Update stored cwd metadata after moving a project
+codexmv --account personal /old/project/path /new/project/path
 ```
 
-## Standards used
+The move operation changes only indexed session metadata and writes a rollback journal. It does not move project files.
 
-AgentShell uses provider-supported state roots rather than changing `$HOME`:
+## Supported provider state
 
-- [Codex `CODEX_HOME`](https://learn.chatgpt.com/docs/config-file/environment-variables)
-- [Claude Code `CLAUDE_CONFIG_DIR`](https://code.claude.com/docs/en/env-vars)
-- [Gemini CLI `GEMINI_CLI_HOME`](https://github.com/google-gemini/gemini-cli/blob/main/docs/reference/configuration.md)
-- [Copilot CLI `COPILOT_HOME`](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference)
+| Provider | Profile routing | Example |
+|---|---|---|
+| Codex | `CODEX_HOME`, `CODEX_SQLITE_HOME` | `codex --account lab` |
+| Claude Code | `CLAUDE_CONFIG_DIR` | `claude --account lab` |
+| Gemini CLI | `GEMINI_CLI_HOME` | `gemini --account personal` |
+| GitHub Copilot CLI | `COPILOT_HOME`, `COPILOT_CACHE_HOME` | `copilot --account company` |
 
-## License
+Provider details and limitations are documented in [docs/providers.md](docs/providers.md).
 
-[MIT](LICENSE)
+## Repository map
+
+| Path | Purpose |
+|---|---|
+| [bin/agentshell](bin/agentshell) | Dependency-light profile runtime and command dispatcher |
+| [shell/agentshell.bash](shell/agentshell.bash) | Opt-in Bash interception for leading account options |
+| [install.sh](install.sh) | Idempotent current-user installer |
+| [docs/tutorial.md](docs/tutorial.md) | Complete start-to-finish tutorial |
+| [docs/architecture.md](docs/architecture.md) | State boundaries, inheritance, and safety design |
+| [docs/providers.md](docs/providers.md) | Codex, Claude, Gemini, and Copilot adapters |
+| [tests/test.sh](tests/test.sh) | Isolated integration tests |
+| [SECURITY.md](SECURITY.md) | Credential and disclosure guidance |
+
+## Installation layout
+
+```text
+~/.local/lib/agentshell/agentshell       runtime
+~/.local/bin/agent-*                     commands
+~/scripts/sourced_agent_shell.sh         Bash integration
+~/.local/share/agentshell/profiles/      private profile state
+```
+
+AgentShell keeps `HOME`, `PWD`, Git credentials, and the real filesystem unchanged. Authored settings and skills may be inherited, but known provider credentials and histories are never copied into a new profile.
+
+## Update and validate
+
+```bash
+cd "$HOME/ProjectsLFS/AgentShell"
+git pull --rebase
+./install.sh
+. "$HOME/.bashrc"
+
+bash -n bin/agentshell shell/agentshell.bash install.sh tests/test.sh
+bash tests/test.sh
+git diff --check
+```
+
+## Security scope
+
+- Never commit profile homes, `auth.json`, tokens, cookies, SQLite databases, or private environment files.
+- Shared history intentionally exposes indexed session titles, previews, and paths to each participating profile.
+- Inherited API-token variables are cleared unless a profile explicitly opts in.
+- Use separate Unix users, machines, or externally enforced containers for mutually untrusted people.
+
+See [SECURITY.md](SECURITY.md) and [docs/architecture.md](docs/architecture.md).
 
 ## Citation
 
-GitHub exposes citation metadata from [`CITATION.cff`](CITATION.cff). A compact software citation is:
+If you use AgentShell in research or tooling, cite the repository. GitHub reads [CITATION.cff](CITATION.cff) and shows a **Cite this repository** panel on the repository page.
 
 ```bibtex
-@software{chen_2026_agentshell,
-  author = {Lachlan Chen},
-  title = {AgentShell: named AI CLI account profiles for shared working trees},
+@software{chen_agentshell_2026,
+  author = {Chen, Lachlan},
+  title = {AgentShell: Named AI CLI Account Profiles for Shared Working Trees},
   year = {2026},
   url = {https://github.com/lachlanchen/AgentShell}
 }
 ```
+
+## Status and license
+
+AgentShell is an actively maintained, dependency-light Bash utility. Codex is the primary verified integration; other provider adapters follow their documented state-directory controls. Licensed under the [MIT License](LICENSE).
+
+## Links
+
+- [Complete tutorial](docs/tutorial.md)
+- [GitHub repository](https://github.com/lachlanchen/AgentShell)
+- [LazyingArt](https://lazying.art)
+- [GitHub Sponsors](https://github.com/sponsors/lachlanchen)
+- [Official Codex environment variables](https://learn.chatgpt.com/docs/config-file/environment-variables)

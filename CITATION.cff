@@ -2,10 +2,20 @@ cff-version: 1.2.0
 message: "If AgentShell supports your work, please cite this repository."
 type: software
 title: "AgentShell: named AI CLI account profiles for shared working trees"
+version: 0.2.0
 authors:
   - family-names: Chen
     given-names: Lachlan
+    alias: lachlanchen
 repository-code: "https://github.com/lachlanchen/AgentShell"
-url: "https://github.com/lachlanchen/AgentShell"
+url: "https://lazying.art"
 license: MIT
 date-released: 2026-08-24
+abstract: "A dependency-light Bash utility for using separate AI CLI account profiles in multiple terminals while preserving one real working tree."
+keywords:
+  - AI CLI
+  - Codex CLI
+  - multiple accounts
+  - terminal workflow
+  - Bash
+  - developer tools
