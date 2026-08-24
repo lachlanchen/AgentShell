@@ -52,16 +52,9 @@ codex --account personal login --device-auth
 ## الاستخدام اليومي
 
 ```bash
-codex --account personal
-codex --account lab -m gpt-5.6-sol "Review this repository"
-codexr --account company --all
-
-cd /path/to/project
-agentshell lab
-agentshell -v
-codex
+source ~/.bashrc
+agentshell personal
 codexr
-exit
 ```
 
 يجب أن يأتي خيار AgentShell المسمى `--account` أولا. من دونه، تحتفظ أوامر `codex` و`codexr` و`codexmv` بسلوكها المعتاد.

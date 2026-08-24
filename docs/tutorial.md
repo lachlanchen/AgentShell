@@ -38,69 +38,31 @@ codexr
 codexmv
 ```
 
-## Copy-paste recipes
+## The three commands to remember
 
-### First login and first resume
+Run these in any terminal and from any current directory:
 
 ```bash
-# Load AgentShell into the current terminal.
-. ~/.bashrc
+source ~/.bashrc
+agentshell personal
+codexr
+```
 
-# Create the account label and log it into Codex.
-agent-profile create personal
+That is the normal workflow. Replace `personal` with `lab` or `company` when needed. Once inside the named shell, plain `codex`, `codexr`, and `codexmv` all use that account.
+
+For the first login only:
+
+```bash
+source ~/.bashrc
 codex --account personal login
-
-# Let this login use the workstation's existing Codex sessions.
 agent-profile history personal shared
-
-# Go to a project and open its resume picker.
-cd ~/ProjectsLFS/LALACHAN
-codexr --account personal
 ```
 
-### Everyday dedicated terminal
+After login, return to the three-command workflow. Run `exit` when you want to leave the named AgentShell terminal.
+
+One-shot commands remain available when a dedicated shell is not wanted:
 
 ```bash
-. ~/.bashrc
-cd ~/ProjectsLFS/LALACHAN
-agentshell personal
-
-# Confirm which local account profile is active.
-agentshell -v
-
-# Resume or start work. --account is no longer needed inside this shell.
-codexr
-codex
-
-# Return to the ordinary parent shell.
-exit
-```
-
-### Two accounts in two terminals
-
-Personal terminal:
-
-```bash
-. ~/.bashrc
-cd ~/ProjectsLFS/LALACHAN
-agentshell personal
-codexr
-```
-
-Lab terminal:
-
-```bash
-. ~/.bashrc
-cd ~/ProjectsLFS/LALACHAN
-agentshell lab
-codex login                 # needed only before the first lab use
-codexr
-```
-
-If you do not want a dedicated AgentShell terminal, use one-shot commands instead:
-
-```bash
-. ~/.bashrc
 codex --account personal
 codexr --account personal
 codexr --account personal --all
@@ -441,7 +403,7 @@ agent-profile status personal codex
 Terminal 1, personal work:
 
 ```bash
-cd "$HOME/ProjectsLFS/LALACHAN"
+source ~/.bashrc
 agentshell personal
 codexr
 ```
@@ -449,7 +411,7 @@ codexr
 Terminal 2, lab work:
 
 ```bash
-cd "$HOME/ProjectsLFS/LALACHAN"
+source ~/.bashrc
 agentshell lab
 codex
 ```
@@ -457,7 +419,7 @@ codex
 Terminal 3, company work:
 
 ```bash
-cd "$HOME/ProjectsLFS/CompanyProject"
+source ~/.bashrc
 agentshell company
 codex
 ```

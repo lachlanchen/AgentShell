@@ -50,16 +50,9 @@ codex --account personal login --device-auth
 ## 日常使用
 
 ```bash
-codex --account personal
-codex --account lab -m gpt-5.6-sol "Review this repository"
-codexr --account company --all
-
-cd /path/to/project
-agentshell lab
-agentshell -v
-codex
+source ~/.bashrc
+agentshell personal
 codexr
-exit
 ```
 
 AgentShell 的 `--account` 必須放在最前面。沒有帳號選項的 `codex`、`codexr` 與 `codexmv` 會維持原本行為。

@@ -15,49 +15,27 @@
 
 AgentShell lets personal, laboratory, and company terminals use different Codex logins without copying projects, changing Unix users, or maintaining containers. Each process stays in the current directory while provider-supported environment variables route authentication and state into a named profile.
 
-## Copy-paste example
+## Use in any terminal
 
-First time for an account:
+This is the normal copy-paste workflow:
 
 ```bash
-# Load the AgentShell functions in this terminal.
-. ~/.bashrc
+source ~/.bashrc
+agentshell personal
+codexr
+```
 
-# Create a label, log that label into Codex, and share existing sessions.
-agent-profile create personal
+It works from whichever directory that terminal is already using. Replace `personal` with `lab` or `company` when needed.
+
+Only the first login needs two extra commands:
+
+```bash
+source ~/.bashrc
 codex --account personal login
 agent-profile history personal shared
-
-# Open the session picker with the personal login.
-cd ~/ProjectsLFS/LALACHAN
-codexr --account personal
 ```
 
-Normal daily use in a dedicated terminal:
-
-```bash
-. ~/.bashrc
-cd ~/ProjectsLFS/LALACHAN
-agentshell personal
-
-# These now all use the personal account.
-agentshell -v
-codexr
-codex
-
-# Leave the account-specific terminal when finished.
-exit
-```
-
-Use another account in another terminal:
-
-```bash
-. ~/.bashrc
-cd ~/ProjectsLFS/LALACHAN
-agentshell lab
-codex login                 # first use only inside this dedicated shell
-codexr
-```
+Inside `agentshell personal`, plain `codex`, `codexr`, and `codexmv` all use that account. Run `exit` when finished.
 
 | Donate | PayPal | Stripe |
 | --- | --- | --- |

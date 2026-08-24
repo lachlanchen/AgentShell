@@ -50,16 +50,9 @@ Xem [hướng dẫn đầy đủ](../docs/tutorial.md) về cài đặt, đăng 
 ## Sử dụng hằng ngày
 
 ```bash
-codex --account personal
-codex --account lab -m gpt-5.6-sol "Review this repository"
-codexr --account company --all
-
-cd /path/to/project
-agentshell lab
-agentshell -v
-codex
+source ~/.bashrc
+agentshell personal
 codexr
-exit
 ```
 
 Tùy chọn `--account` của AgentShell phải đứng đầu. Khi không có tùy chọn tài khoản, `codex`, `codexr` và `codexmv` vẫn hoạt động như trước.

@@ -50,16 +50,9 @@ codex --account personal login --device-auth
 ## Повседневное использование
 
 ```bash
-codex --account personal
-codex --account lab -m gpt-5.6-sol "Review this repository"
-codexr --account company --all
-
-cd /path/to/project
-agentshell lab
-agentshell -v
-codex
+source ~/.bashrc
+agentshell personal
 codexr
-exit
 ```
 
 Параметр AgentShell `--account` должен стоять первым. Без него `codex`, `codexr` и `codexmv` сохраняют обычное поведение.

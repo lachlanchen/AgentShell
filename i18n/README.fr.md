@@ -50,16 +50,9 @@ Consultez le [tutoriel complet](../docs/tutorial.md) pour l'installation, la con
 ## Utilisation quotidienne
 
 ```bash
-codex --account personal
-codex --account lab -m gpt-5.6-sol "Review this repository"
-codexr --account company --all
-
-cd /path/to/project
-agentshell lab
-agentshell -v
-codex
+source ~/.bashrc
+agentshell personal
 codexr
-exit
 ```
 
 L'option AgentShell `--account` doit être placée en premier. Sans cette option, `codex`, `codexr` et `codexmv` conservent leur comportement habituel.
