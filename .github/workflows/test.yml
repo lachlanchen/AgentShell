@@ -1,0 +1,18 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  bash:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Bash syntax
+        run: bash -n bin/agentshell shell/agentshell.bash install.sh tests/test.sh
+      - name: Run integration tests
+        run: bash tests/test.sh

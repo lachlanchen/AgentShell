@@ -1,0 +1,14 @@
+# Account profiles may contain credentials, histories, and private settings.
+profiles/
+.agentshell/
+auth.json
+*.sqlite
+*.sqlite-*
+*.db
+*.log
+.env
+env.sh
+
+# Local test/build output.
+.tmp/
+tmp/

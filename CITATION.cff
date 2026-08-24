@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If AgentShell supports your work, please cite this repository."
+type: software
+title: "AgentShell: named AI CLI account profiles for shared working trees"
+authors:
+  - family-names: Chen
+    given-names: Lachlan
+repository-code: "https://github.com/lachlanchen/AgentShell"
+url: "https://github.com/lachlanchen/AgentShell"
+license: MIT
+date-released: 2026-08-24

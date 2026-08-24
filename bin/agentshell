@@ -1,0 +1,491 @@
+#!/usr/bin/env bash
+# Named, account-isolated shells for Codex and other AI command-line tools.
+
+set -euo pipefail
+
+agent_shell_program="$(basename -- "$0")"
+agent_shell_self="$(readlink -f -- "${BASH_SOURCE[0]}")"
+agent_shell_data_home="${AGENT_SHELL_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/agentshell}"
+agent_shell_profiles_dir="$agent_shell_data_home/profiles"
+agent_shell_bin_dir="${AGENT_SHELL_BIN_DIR:-$HOME/.local/bin}"
+agent_shell_profile_tools=(codex codexr codexmv claude gemini copilot)
+
+agent_shell_die() {
+  printf 'AgentShell error: %s\n' "$*" >&2
+  exit 2
+}
+
+agent_shell_usage() {
+  cat <<'EOF'
+AgentShell — separate AI CLI accounts by named terminal profile
+
+Usage:
+  agentshell ACCOUNT
+  agentshell --account ACCOUNT [-- COMMAND [ARG...]]
+  agent-run --account ACCOUNT TOOL [ARG...]
+  agent-profile create|list|show|status|login|aliases ACCOUNT [TOOL]
+
+Codex shortcuts:
+  agent-codex   --account ACCOUNT [CODEX_ARG...]
+  agent-codexr  --account ACCOUNT [RESUME_ARG...]
+  agent-codexmv --account ACCOUNT [MOVE_ARG...]
+
+After shell integration is installed:
+  codex   --account ACCOUNT [CODEX_ARG...]
+  codexr  --account ACCOUNT [RESUME_ARG...]
+  codexmv --account ACCOUNT [MOVE_ARG...]
+
+Creating ACCOUNT also creates commands such as:
+  agent-ACCOUNT-codex
+  agent-ACCOUNT-codexr
+  agent-ACCOUNT-codexmv
+  agent-ACCOUNT-claude
+  agent-ACCOUNT-gemini
+  agent-ACCOUNT-copilot
+
+The process keeps its current working directory. Only per-tool account/state
+locations change; this is not a filesystem or security container.
+EOF
+}
+
+agent_shell_validate_name() {
+  local name="$1"
+  if [[ ! "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]]; then
+    agent_shell_die "invalid account name '$name' (use 1-64 letters, numbers, dots, underscores, or hyphens)"
+  fi
+}
+
+agent_shell_profile_root() {
+  printf '%s/%s\n' "$agent_shell_profiles_dir" "$1"
+}
+
+agent_shell_safe_link() {
+  local target="$1" link="$2" current=""
+  mkdir -p -- "$(dirname -- "$link")"
+  if [ -L "$link" ]; then
+    current="$(readlink -f -- "$link" 2>/dev/null || true)"
+    if [ "$current" = "$(readlink -f -- "$target")" ]; then
+      return 0
+    fi
+    printf 'AgentShell warning: keeping unrelated symlink: %s -> %s\n' "$link" "$(readlink -- "$link")" >&2
+    return 1
+  fi
+  if [ -e "$link" ]; then
+    printf 'AgentShell warning: keeping existing path: %s\n' "$link" >&2
+    return 1
+  fi
+  ln -s -- "$target" "$link"
+}
+
+agent_shell_link_shared_item() {
+  local source="$1" destination="$2"
+  [ -e "$source" ] || [ -L "$source" ] || return 0
+  [ ! -e "$destination" ] && [ ! -L "$destination" ] || return 0
+  ln -s -- "$source" "$destination"
+}
+
+agent_shell_copy_codex_config() {
+  local source="$1" destination="$2"
+  [ -f "$source" ] || return 0
+  [ ! -e "$destination" ] || return 0
+  # A copied sqlite_home could redirect a named account back to another
+  # account's state. Remove that one path-setting while retaining all other
+  # local Codex preferences and MCP configuration.
+  awk '!/^[[:space:]]*sqlite_home[[:space:]]*=/' "$source" > "$destination"
+  chmod 600 "$destination"
+}
+
+agent_shell_install_profile_aliases() {
+  local name="$1" tool link failed=0
+  mkdir -p -- "$agent_shell_bin_dir"
+  for tool in "${agent_shell_profile_tools[@]}"; do
+    link="$agent_shell_bin_dir/agent-$name-$tool"
+    agent_shell_safe_link "$agent_shell_self" "$link" || failed=1
+  done
+  return "$failed"
+}
+
+agent_shell_seed_profile() {
+  local root="$1"
+  local base_codex="${AGENT_SHELL_BASE_CODEX_HOME:-$HOME/.codex}"
+  local base_claude="${AGENT_SHELL_BASE_CLAUDE_HOME:-$HOME/.claude}"
+  local base_gemini="${AGENT_SHELL_BASE_GEMINI_HOME:-$HOME/.gemini}"
+  local base_copilot="${AGENT_SHELL_BASE_COPILOT_HOME:-$HOME/.copilot}"
+  local item
+
+  agent_shell_copy_codex_config "$base_codex/config.toml" "$root/codex-home/config.toml"
+  for item in AGENTS.md skills plugins rules; do
+    agent_shell_link_shared_item "$base_codex/$item" "$root/codex-home/$item"
+  done
+
+  # Share authored customizations, never account credentials or histories.
+  for item in CLAUDE.md settings.json settings.local.json skills commands agents plugins; do
+    agent_shell_link_shared_item "$base_claude/$item" "$root/claude-home/$item"
+  done
+  for item in settings.json extensions skills commands; do
+    agent_shell_link_shared_item "$base_gemini/$item" "$root/gemini-home/.gemini/$item"
+  done
+  for item in settings.json agents skills hooks instructions copilot-instructions.md; do
+    agent_shell_link_shared_item "$base_copilot/$item" "$root/copilot-home/$item"
+  done
+}
+
+agent_shell_create_profile() {
+  local name="$1" root created=0
+  agent_shell_validate_name "$name"
+  root="$(agent_shell_profile_root "$name")"
+  umask 077
+  if [ ! -d "$root" ]; then
+    created=1
+    mkdir -p -- \
+      "$root/codex-home" \
+      "$root/claude-home" \
+      "$root/gemini-home/.gemini" \
+      "$root/copilot-home" \
+      "$root/cache/copilot"
+    {
+      printf 'name=%s\n' "$name"
+      printf 'format_version=1\n'
+      printf 'created_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    } > "$root/profile.conf"
+    cat > "$root/env.sh" <<'EOF'
+# Optional account-specific environment variables.
+# This file is sourced as shell code and must remain private (mode 0600).
+# Prefer each provider's browser login. If an API key is required, export it
+# here instead of placing it in a shared ~/.bashrc.
+EOF
+    chmod 600 "$root/profile.conf" "$root/env.sh"
+  fi
+
+  agent_shell_seed_profile "$root"
+  agent_shell_install_profile_aliases "$name" || true
+  if [ "$created" -eq 1 ]; then
+    printf 'Created AgentShell account: %s\n' "$name" >&2
+    printf '  state: %s\n' "$root" >&2
+  fi
+}
+
+agent_shell_clear_inherited_auth() {
+  if [ "${AGENT_SHELL_PRESERVE_AUTH_ENV:-0}" = "1" ]; then
+    return 0
+  fi
+  unset \
+    CODEX_API_KEY CODEX_ACCESS_TOKEN OPENAI_API_KEY \
+    ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN \
+    GEMINI_API_KEY GOOGLE_API_KEY GOOGLE_APPLICATION_CREDENTIALS \
+    COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN \
+    CODEX_SESSION_ID CODEX_THREAD_ID CODEX_CI || true
+}
+
+agent_shell_activate_profile() {
+  local name="$1" root env_file
+  agent_shell_create_profile "$name"
+  root="$(agent_shell_profile_root "$name")"
+  env_file="$root/env.sh"
+
+  agent_shell_clear_inherited_auth
+  if [ -r "$env_file" ]; then
+    # shellcheck disable=SC1090
+    . "$env_file"
+  fi
+
+  # Export these after env.sh so account isolation cannot be accidentally
+  # redirected by a stale entry in that file.
+  export AGENT_SHELL_ACCOUNT="$name"
+  export AGENT_SHELL_PROFILE_ROOT="$root"
+  export AGENT_SHELL_PROFILE_ENV="$env_file"
+  export CODEX_HOME="$root/codex-home"
+  export CODEX_SQLITE_HOME="$root/codex-home"
+  export CLAUDE_CONFIG_DIR="$root/claude-home"
+  export GEMINI_CLI_HOME="$root/gemini-home"
+  export COPILOT_HOME="$root/copilot-home"
+  export COPILOT_CACHE_HOME="$root/cache/copilot"
+}
+
+agent_shell_command_path() {
+  local command_name="$1" path=""
+  path="$(type -P "$command_name" 2>/dev/null || true)"
+  [ -n "$path" ] || return 1
+  if [ "$(readlink -f -- "$path")" = "$agent_shell_self" ]; then
+    return 1
+  fi
+  printf '%s\n' "$path"
+}
+
+agent_shell_run_tool() {
+  local name="$1" tool="$2" command_path wrapper
+  shift 2
+  agent_shell_activate_profile "$name"
+
+  wrapper="${AGENT_SHELL_CODEX_WRAPPER:-$HOME/scripts/codex_wrapper.sh}"
+  case "$tool" in
+    codex|codexr|codexmv)
+      if [ "${AGENT_SHELL_USE_CODEX_WRAPPER:-1}" = "1" ] && [ -x "$wrapper" ]; then
+        exec "$wrapper" "$tool" "$@"
+      fi
+      ;;
+  esac
+
+  case "$tool" in
+    codex)
+      command_path="$(agent_shell_command_path codex)" || agent_shell_die "codex executable not found"
+      exec "$command_path" "$@"
+      ;;
+    codexr)
+      command_path="$(agent_shell_command_path codex)" || agent_shell_die "codex executable not found"
+      exec "$command_path" resume "$@"
+      ;;
+    codexmv)
+      command_path="$(agent_shell_command_path codexmv)" || agent_shell_die "codexmv requires the workstation wrapper or an executable codexmv command"
+      exec "$command_path" "$@"
+      ;;
+    claude|gemini|copilot)
+      command_path="$(agent_shell_command_path "$tool")" || agent_shell_die "$tool executable not found"
+      exec "$command_path" "$@"
+      ;;
+    *)
+      command_path="$(agent_shell_command_path "$tool")" || agent_shell_die "command not found: $tool"
+      exec "$command_path" "$@"
+      ;;
+  esac
+}
+
+agent_shell_write_bashrc() {
+  local root="$1" rcfile="$root/bashrc"
+  cat > "$rcfile" <<'EOF'
+# Generated by AgentShell. Profile data is supplied through exported variables.
+if [ -r "$HOME/.bashrc" ]; then
+  . "$HOME/.bashrc"
+fi
+
+if [ "${AGENT_SHELL_PRESERVE_AUTH_ENV:-0}" != "1" ]; then
+  unset \
+    CODEX_API_KEY CODEX_ACCESS_TOKEN OPENAI_API_KEY \
+    ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN \
+    GEMINI_API_KEY GOOGLE_API_KEY GOOGLE_APPLICATION_CREDENTIALS \
+    COPILOT_GITHUB_TOKEN GH_TOKEN GITHUB_TOKEN \
+    CODEX_SESSION_ID CODEX_THREAD_ID CODEX_CI || true
+fi
+if [ -r "${AGENT_SHELL_PROFILE_ENV:-}" ]; then
+  . "$AGENT_SHELL_PROFILE_ENV"
+fi
+
+export CODEX_HOME="$AGENT_SHELL_PROFILE_ROOT/codex-home"
+export CODEX_SQLITE_HOME="$AGENT_SHELL_PROFILE_ROOT/codex-home"
+export CLAUDE_CONFIG_DIR="$AGENT_SHELL_PROFILE_ROOT/claude-home"
+export GEMINI_CLI_HOME="$AGENT_SHELL_PROFILE_ROOT/gemini-home"
+export COPILOT_HOME="$AGENT_SHELL_PROFILE_ROOT/copilot-home"
+export COPILOT_CACHE_HOME="$AGENT_SHELL_PROFILE_ROOT/cache/copilot"
+export PS1="[agent:${AGENT_SHELL_ACCOUNT}] ${PS1:-\\u@\\h:\\w\\$ }"
+EOF
+  chmod 600 "$rcfile"
+  printf '%s\n' "$rcfile"
+}
+
+agent_shell_open_shell() {
+  local name="$1" root rcfile
+  agent_shell_activate_profile "$name"
+  root="$(agent_shell_profile_root "$name")"
+  rcfile="$(agent_shell_write_bashrc "$root")"
+  printf 'AgentShell account %s — cwd remains %s\n' "$name" "$(pwd -P)" >&2
+  exec bash --noprofile --rcfile "$rcfile" -i
+}
+
+agent_shell_list_profiles() {
+  local name root codex_auth
+  printf '%-24s %-12s %s\n' 'ACCOUNT' 'CODEX LOGIN' 'STATE'
+  if [ ! -d "$agent_shell_profiles_dir" ]; then
+    return 0
+  fi
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    root="$(agent_shell_profile_root "$name")"
+    codex_auth='not logged in'
+    [ -s "$root/codex-home/auth.json" ] && codex_auth='saved'
+    printf '%-24s %-12s %s\n' "$name" "$codex_auth" "$root"
+  done < <(find "$agent_shell_profiles_dir" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | LC_ALL=C sort)
+}
+
+agent_shell_show_profile() {
+  local name="$1" root
+  agent_shell_create_profile "$name"
+  root="$(agent_shell_profile_root "$name")"
+  cat <<EOF
+Account:       $name
+Profile root:  $root
+Codex home:    $root/codex-home
+Claude home:   $root/claude-home
+Gemini home:   $root/gemini-home
+Copilot home:  $root/copilot-home
+Working dir:   $(pwd -P) (unchanged)
+Private env:   $root/env.sh
+EOF
+}
+
+agent_shell_show_aliases() {
+  local name="$1" tool
+  agent_shell_create_profile "$name"
+  for tool in "${agent_shell_profile_tools[@]}"; do
+    printf 'agent-%s-%s\n' "$name" "$tool"
+  done
+}
+
+agent_shell_profile_status() {
+  local name="$1" provider="${2:-codex}" root
+  agent_shell_create_profile "$name"
+  root="$(agent_shell_profile_root "$name")"
+  agent_shell_show_profile "$name"
+  printf '\n%s status:\n' "$provider"
+  case "$provider" in
+    codex)
+      (agent_shell_run_tool "$name" codex login status) || true
+      ;;
+    claude|gemini|copilot)
+      printf '  Isolated state exists at: %s\n' "$root/${provider}-home"
+      printf '  Launch agent-%s-%s to verify or complete its login.\n' "$name" "$provider"
+      ;;
+    *) agent_shell_die "unsupported provider for status: $provider" ;;
+  esac
+}
+
+agent_shell_profile_login() {
+  local name="$1" provider="${2:-codex}"
+  case "$provider" in
+    codex) agent_shell_run_tool "$name" codex login ;;
+    claude|gemini|copilot)
+      printf 'Launching %s in account %s; use its login flow if prompted.\n' "$provider" "$name" >&2
+      agent_shell_run_tool "$name" "$provider"
+      ;;
+    *) agent_shell_die "unsupported provider for login: $provider" ;;
+  esac
+}
+
+agent_shell_profile_main() {
+  local action="${1:-}" name="${2:-}" provider="${3:-codex}"
+  case "$action" in
+    create)
+      [ -n "$name" ] || agent_shell_die 'profile create requires ACCOUNT'
+      agent_shell_create_profile "$name"
+      agent_shell_show_profile "$name"
+      ;;
+    list|ls) agent_shell_list_profiles ;;
+    show)
+      [ -n "$name" ] || agent_shell_die 'profile show requires ACCOUNT'
+      agent_shell_show_profile "$name"
+      ;;
+    aliases)
+      [ -n "$name" ] || agent_shell_die 'profile aliases requires ACCOUNT'
+      agent_shell_show_aliases "$name"
+      ;;
+    status)
+      [ -n "$name" ] || agent_shell_die 'profile status requires ACCOUNT'
+      agent_shell_profile_status "$name" "$provider"
+      ;;
+    login)
+      [ -n "$name" ] || agent_shell_die 'profile login requires ACCOUNT'
+      agent_shell_profile_login "$name" "$provider"
+      ;;
+    -h|--help|help|'') agent_shell_usage ;;
+    *) agent_shell_die "unknown profile action: $action" ;;
+  esac
+}
+
+AGENT_SHELL_PARSED_ACCOUNT=""
+AGENT_SHELL_PARSED_ARGS=()
+agent_shell_parse_account_option() {
+  AGENT_SHELL_PARSED_ACCOUNT=""
+  AGENT_SHELL_PARSED_ARGS=()
+  case "${1:-}" in
+    --account|--project)
+      [ "$#" -ge 2 ] || agent_shell_die "$1 requires a value"
+      AGENT_SHELL_PARSED_ACCOUNT="$2"
+      shift 2
+      ;;
+    --account=*|--project=*)
+      AGENT_SHELL_PARSED_ACCOUNT="${1#*=}"
+      shift
+      ;;
+  esac
+  AGENT_SHELL_PARSED_ARGS=("$@")
+}
+
+agent_shell_static_tool_main() {
+  local tool="$1" account
+  shift
+  agent_shell_parse_account_option "$@"
+  account="$AGENT_SHELL_PARSED_ACCOUNT"
+  [ -n "$account" ] || account="${AGENT_SHELL_ACCOUNT:-}"
+  [ -n "$account" ] || agent_shell_die "$tool requires --account ACCOUNT (or run it inside agentshell ACCOUNT)"
+  agent_shell_run_tool "$account" "$tool" "${AGENT_SHELL_PARSED_ARGS[@]}"
+}
+
+agent_shell_run_main() {
+  local account="" tool=""
+  agent_shell_parse_account_option "$@"
+  account="$AGENT_SHELL_PARSED_ACCOUNT"
+  set -- "${AGENT_SHELL_PARSED_ARGS[@]}"
+  if [ -z "$account" ] && [ "$#" -gt 0 ] && [[ "$1" != -* ]]; then
+    account="$1"
+    shift
+  fi
+  [ -n "$account" ] || agent_shell_die 'agent-run requires --account ACCOUNT'
+  [ "$#" -gt 0 ] || agent_shell_die 'agent-run requires TOOL'
+  tool="$1"
+  shift
+  [ "$tool" = "--" ] && { [ "$#" -gt 0 ] || agent_shell_die 'missing command after --'; tool="$1"; shift; }
+  agent_shell_run_tool "$account" "$tool" "$@"
+}
+
+agent_shell_main() {
+  local account=""
+  if [ "${1:-}" = "profile" ]; then
+    shift
+    agent_shell_profile_main "$@"
+    return
+  fi
+  if [ "${1:-}" = "run" ]; then
+    shift
+    agent_shell_run_main "$@"
+    return
+  fi
+  case "${1:-}" in
+    -h|--help|help|'') agent_shell_usage; return ;;
+  esac
+
+  agent_shell_parse_account_option "$@"
+  account="$AGENT_SHELL_PARSED_ACCOUNT"
+  set -- "${AGENT_SHELL_PARSED_ARGS[@]}"
+  if [ -z "$account" ]; then
+    account="${1:-}"
+    [ -n "$account" ] || agent_shell_die 'agentshell requires ACCOUNT'
+    shift
+  fi
+  agent_shell_validate_name "$account"
+  if [ "${1:-}" = "--" ]; then
+    shift
+  fi
+  if [ "$#" -eq 0 ]; then
+    agent_shell_open_shell "$account"
+  else
+    agent_shell_run_tool "$account" "$1" "${@:2}"
+  fi
+}
+
+# Generated per-account command, for example agent-lab-codexr.
+if [[ "$agent_shell_program" =~ ^agent-(.+)-(codexr|codexmv|codex|claude|gemini|copilot)$ ]]; then
+  agent_shell_run_tool "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "$@"
+  exit $?
+fi
+
+case "$agent_shell_program" in
+  agent-profile) agent_shell_profile_main "$@" ;;
+  agent-run) agent_shell_run_main "$@" ;;
+  agent-codex) agent_shell_static_tool_main codex "$@" ;;
+  agent-codexr) agent_shell_static_tool_main codexr "$@" ;;
+  agent-codexmv) agent_shell_static_tool_main codexmv "$@" ;;
+  agent-claude) agent_shell_static_tool_main claude "$@" ;;
+  agent-gemini) agent_shell_static_tool_main gemini "$@" ;;
+  agent-copilot) agent_shell_static_tool_main copilot "$@" ;;
+  agentshell) agent_shell_main "$@" ;;
+  *) agent_shell_die "unknown invocation name: $agent_shell_program" ;;
+esac
