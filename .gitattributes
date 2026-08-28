@@ -1,0 +1,4 @@
+*.sh text eol=lf
+*.bash text eol=lf
+bin/agentshell text eol=lf
+tests/test.sh text eol=lf

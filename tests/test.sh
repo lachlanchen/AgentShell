@@ -24,6 +24,7 @@ printf 'shared skill\n' > "$HOME/.codex/skills/example.md"
 cat > "$test_root/native/codex" <<'EOF'
 #!/usr/bin/env bash
 {
+  printf 'tool=%s\n' "$(basename -- "$0")"
   printf 'cwd=%s\n' "$(pwd -P)"
   printf 'codex_home=%s\n' "${CODEX_HOME:-}"
   printf 'sqlite_home=%s\n' "${CODEX_SQLITE_HOME:-}"
@@ -34,6 +35,7 @@ cat > "$test_root/native/codex" <<'EOF'
 printf 'stub codex\n'
 EOF
 chmod 0755 "$test_root/native/codex"
+ln -s codex "$test_root/native/codexmv"
 
 for name in agentshell agent-run agent-profile agent-codex agent-codexr agent-codexmv agent-claude agent-gemini agent-copilot; do
   ln -s "$repo_root/bin/agentshell" "$AGENT_SHELL_BIN_DIR/$name"
@@ -66,15 +68,47 @@ agent-profile history alpha shared >/dev/null
 agent-alpha-codex --version >/dev/null
 grep -q "^sqlite_home=$HOME/.codex$" "$AGENT_TEST_OUTPUT"
 grep -q '^History mode:   shared$' <<<"$(agentshell status alpha)"
+grep -q '^AgentShell 0.3.0$' <<<"$(agentshell --version)"
 
 # Optional Bash interception changes only calls that explicitly name an account.
+alias cr='printf existing-cr'
 # shellcheck disable=SC1091
 . "$repo_root/shell/agentshell.bash"
+alias cr | grep -q 'printf existing-cr'
+
+codex --version >/dev/null
+grep -q '^tool=codex$' "$AGENT_TEST_OUTPUT"
+grep -q '^account=$' "$AGENT_TEST_OUTPUT"
+grep -q '^openai_api_key=inherited-key-must-be-cleared$' "$AGENT_TEST_OUTPUT"
+grep -q '^arg=--version$' "$AGENT_TEST_OUTPUT"
+
+codexr --all >/dev/null
+grep -q '^tool=codex$' "$AGENT_TEST_OUTPUT"
+grep -q '^account=$' "$AGENT_TEST_OUTPUT"
+grep -q '^arg=resume$' "$AGENT_TEST_OUTPUT"
+grep -q '^arg=--all$' "$AGENT_TEST_OUTPUT"
+
+codexmv '/old project' '/new project' --no-resume >/dev/null
+grep -q '^tool=codexmv$' "$AGENT_TEST_OUTPUT"
+grep -q '^account=$' "$AGENT_TEST_OUTPUT"
+grep -q '^arg=/old project$' "$AGENT_TEST_OUTPUT"
+grep -q '^arg=/new project$' "$AGENT_TEST_OUTPUT"
+
+codex -p native-profile --account beta >/dev/null
+grep -q '^account=$' "$AGENT_TEST_OUTPUT"
+grep -q '^arg=-p$' "$AGENT_TEST_OUTPUT"
+grep -q '^arg=--account$' "$AGENT_TEST_OUTPUT"
+
 codex --account beta --version >/dev/null
 grep -q '^account=beta$' "$AGENT_TEST_OUTPUT"
 grep -q '^arg=--version$' "$AGENT_TEST_OUTPUT"
 grep -q "^sqlite_home=$AGENT_SHELL_HOME/profiles/beta/codex-home$" "$AGENT_TEST_OUTPUT"
 test "$profile" != "$AGENT_SHELL_HOME/profiles/beta"
+
+if agent-codex --account= --version >/dev/null 2>&1; then
+  printf 'empty account value was unexpectedly accepted\n' >&2
+  exit 1
+fi
 
 profile_list_output="$(agent-profile list)"
 profile_show_output="$(agent-profile show alpha)"

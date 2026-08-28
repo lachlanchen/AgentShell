@@ -16,3 +16,11 @@ jobs:
         run: bash -n bin/agentshell shell/agentshell.bash install.sh tests/test.sh
       - name: Run integration tests
         run: bash tests/test.sh
+
+  powershell-5-1:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Windows PowerShell 5.1 integration tests
+        shell: powershell
+        run: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File tests\test.ps1

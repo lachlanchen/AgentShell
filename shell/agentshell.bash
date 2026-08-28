@@ -69,4 +69,6 @@ if type -P copilot >/dev/null 2>&1; then
   }
 fi
 
-alias cr='codexr'
+if ! alias cr >/dev/null 2>&1 && ! declare -F cr >/dev/null 2>&1 && ! type -P cr >/dev/null 2>&1; then
+  alias cr='codexr'
+fi

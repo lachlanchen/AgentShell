@@ -15,7 +15,7 @@ agent-profile history company private
 agentshell status personal
 ```
 
-On this workstation, AgentShell delegates to the existing `codex/codexr/codexmv` dispatcher after activating the account. That preserves the fast session picker, `/rename` support, current-directory filtering, and safe cwd migration journals.
+AgentShell delegates to existing platform `codex`, `codexr`, and `codexmv` commands after activating the account. That preserves any installed fast session picker, `/rename` support, current-directory filtering, and safe cwd migration journals. On Windows, `codexr` falls back to `codex resume` when no separate `codexr` command exists; `codexmv` still requires the workstation command. Bash and PowerShell integrations intercept only a leading `--account` or `--project`; plain commands retain their ordinary behavior.
 
 ```bash
 codex --account personal login
@@ -54,10 +54,16 @@ The GitHub CLI (`gh`) is intentionally not redirected. This avoids unexpectedly 
 
 ## Generic commands
 
-Any installed command can run with the named profile environment:
+On Bash, any installed command can run with the named profile environment:
 
 ```bash
 agent-run --account lab bash -lc 'printf "%s\n" "$CODEX_HOME"'
+```
+
+Windows PowerShell equivalent:
+
+```powershell
+agent-run --account lab powershell.exe -NoLogo -NoProfile -Command '$env:CODEX_HOME'
 ```
 
 Only the four documented providers receive dedicated state directories. Unknown tools simply inherit the named environment.

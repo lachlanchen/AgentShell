@@ -3,7 +3,7 @@
 
 set -euo pipefail
 
-AGENT_SHELL_VERSION="0.2.0"
+AGENT_SHELL_VERSION="0.3.0"
 agent_shell_program="$(basename -- "$0")"
 agent_shell_self="$(readlink -f -- "${BASH_SOURCE[0]}")"
 agent_shell_data_home="${AGENT_SHELL_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/agentshell}"
@@ -507,11 +507,13 @@ agent_shell_parse_account_option() {
   case "${1:-}" in
     --account|--project)
       [ "$#" -ge 2 ] || agent_shell_die "$1 requires a value"
+      [ -n "$2" ] || agent_shell_die "$1 requires a value"
       AGENT_SHELL_PARSED_ACCOUNT="$2"
       shift 2
       ;;
     --account=*|--project=*)
       AGENT_SHELL_PARSED_ACCOUNT="${1#*=}"
+      [ -n "$AGENT_SHELL_PARSED_ACCOUNT" ] || agent_shell_die "${1%%=*} requires a value"
       shift
       ;;
   esac

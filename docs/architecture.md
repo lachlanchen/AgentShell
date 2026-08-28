@@ -2,7 +2,7 @@
 
 ## Isolation model
 
-AgentShell does not change the Unix user or `HOME`, and does not create a container. It exports provider-specific state roots into one child process:
+AgentShell does not change the OS user, `HOME`, or `USERPROFILE`, and does not create a container. It exports provider-specific state roots into one child process:
 
 | Provider | Isolated variable | Profile location |
 |---|---|---|
@@ -27,20 +27,29 @@ agent-profile history personal shared
 
 Shared history allows accounts to discover and resume the same indexed sessions. It also means a lab or company profile can see local titles/previews from that shared index, so private mode is the safer default.
 
+The default data roots are platform-specific but contain the same profile layout:
+
+| Platform | AgentShell data root | Default shared Codex SQLite root |
+|---|---|---|
+| Bash | `${XDG_DATA_HOME:-$HOME/.local/share}/agentshell` | `$HOME/.codex` |
+| Windows PowerShell | `%LOCALAPPDATA%\AgentShell` | `$HOME\.codex` |
+
+`AGENT_SHELL_HOME` can select a different AgentShell data root when required.
+
 ## What is shared
 
 On first creation, AgentShell may inherit authored configuration from the user's default provider directories:
 
-- Codex: a private copy of `config.toml`, excluding `sqlite_home`, plus links to authored `AGENTS.md`, skills, plugins, and rules.
-- Claude, Gemini, and Copilot: links only to known settings/customization paths when present.
+- Codex on both platforms: a private copy of `config.toml`, excluding `sqlite_home`, plus links to authored `AGENTS.md`, skills, plugins, and rules when the host supports them. Windows uses hard links for files and junctions for directories.
+- Claude, Gemini, and Copilot on Bash: links only to known settings/customization paths when present. Windows prepares isolated provider directories without copying ordinary provider credentials or settings.
 
 It never seeds known credential or session files such as Codex `auth.json`, Gemini OAuth files, Copilot `config.json`, or provider histories. Shared Codex history is an explicit runtime SQLite selection, not a copied credential.
 
-The linked customization folders are shared by design. This avoids duplicating tool installations and personal skills, but a change to a shared skill is visible to every profile. Profiles are not a security boundary because they all run as the same OS user.
+Where the host supports the required links, customization folders are shared by design. This avoids duplicating tool installations and personal skills, but a change to a shared skill is visible to every profile. Profiles are not a security boundary because they all run as the same OS user.
 
 ## Inherited environment credentials
 
-An exported API token normally overrides browser login state. AgentShell clears common inherited provider credential variables before launching a profile. Add account-specific variables to the profile's private `env.sh` only when a provider cannot use browser login.
+An exported API token normally overrides browser login state. AgentShell clears common inherited provider credential variables before launching a profile. Add account-specific variables only when a provider cannot use browser login: use the profile's private `env.sh` on Bash or `env.ps1` on Windows, never a public repository or shared shell profile.
 
 To deliberately preserve the parent environment:
 
@@ -48,11 +57,25 @@ To deliberately preserve the parent environment:
 AGENT_SHELL_PRESERVE_AUTH_ENV=1 codex --account lab
 ```
 
+Windows PowerShell equivalent:
+
+```powershell
+$env:AGENT_SHELL_PRESERVE_AUTH_ENV = '1'
+codex --account lab
+Remove-Item Env:AGENT_SHELL_PRESERVE_AUTH_ENV
+```
+
 That option reduces login isolation and should be used knowingly.
 
-## Why not change HOME
+## Shell integration
 
-Changing `HOME` would also hide shell configuration, package managers, SSH keys, GitHub CLI state, Conda, NVM, and many unrelated tools. Provider-specific state variables give the requested account separation without constructing a fragile artificial workstation.
+The Bash installer adds a guarded source line to `.bashrc`; the Windows installer backs up the active Windows PowerShell profile and adds one marked, guarded dot-source block. Both integrations intercept only a leading AgentShell `--account` or `--project` option. An ordinary `codex`, `codexr`, or `codexmv` invocation is passed to the pre-existing command path.
+
+`agentshell ACCOUNT` starts a child Bash or PowerShell process with the selected profile environment. A child process cannot mutate its parent, so leaving it with `exit` restores the ordinary terminal environment. The child's working directory is the caller's current real directory.
+
+## Why not change HOME or USERPROFILE
+
+Changing `HOME` or `USERPROFILE` would also hide shell configuration, package managers, SSH keys, GitHub CLI state, Conda, NVM, and many unrelated tools. Provider-specific state variables give the requested account separation without constructing a fragile artificial workstation.
 
 ## Why not Docker
 

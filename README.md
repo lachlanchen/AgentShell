@@ -9,15 +9,16 @@
 [![Test](https://github.com/lachlanchen/AgentShell/actions/workflows/test.yml/badge.svg)](https://github.com/lachlanchen/AgentShell/actions/workflows/test.yml)
 [![MIT License](https://img.shields.io/badge/license-MIT-22c55e.svg)](LICENSE)
 [![Bash](https://img.shields.io/badge/Bash-dependency--light-4EAA25?logo=gnubash&logoColor=white)](bin/agentshell)
+[![Windows PowerShell](https://img.shields.io/badge/Windows%20PowerShell-5.1-5391FE?logo=powershell&logoColor=white)](shell/agentshell.ps1)
 [![Documentation](https://img.shields.io/badge/docs-complete%20tutorial-2563eb)](docs/tutorial.md)
 [![LazyingArt](https://img.shields.io/badge/home-lazying.art-0EA5E9)](https://lazying.art)
 [![GitHub Sponsors](https://img.shields.io/badge/sponsor-lachlanchen-EA4AAA?logo=githubsponsors)](https://github.com/sponsors/lachlanchen)
 
-AgentShell lets personal, laboratory, and company terminals use different Codex logins without copying projects, changing Unix users, or maintaining containers. Each process stays in the current directory while provider-supported environment variables route authentication and state into a named profile.
+AgentShell lets personal, laboratory, and company terminals use different Codex logins without copying projects, changing OS users, or maintaining containers. Each process stays in the current directory while provider-supported environment variables route authentication and state into a named profile. Bash and Windows PowerShell are supported.
 
 ## Use in any terminal
 
-This is the normal copy-paste workflow:
+On Bash:
 
 ```bash
 source ~/.bashrc
@@ -25,12 +26,19 @@ agentshell personal
 codexr
 ```
 
+On Windows PowerShell:
+
+```powershell
+. $PROFILE
+agentshell personal
+codexr
+```
+
 It works from whichever directory that terminal is already using. Replace `personal` with `lab` or `company` when needed.
 
-Only the first login needs two extra commands:
+Only the first login needs two extra commands; these are identical in both shells:
 
-```bash
-source ~/.bashrc
+```text
 codex --account personal login
 agent-profile history personal shared
 ```
@@ -45,7 +53,7 @@ Inside `agentshell personal`, plain `codex`, `codexr`, and `codexmv` all use tha
 
 ```text
                          same project folder
-                    /home/user/Projects/MyApp
+                       <project directory>
                                 │
               ┌─────────────────┼─────────────────┐
               │                 │                 │
@@ -56,7 +64,7 @@ Inside `agentshell personal`, plain `codex`, `codexr`, and `codexmv` all use tha
                          shared real files
 ```
 
-AgentShell is intentionally lighter than Docker. It separates application state for trusted accounts owned by one Unix user; it is not a filesystem or OS security boundary.
+AgentShell is intentionally lighter than Docker. It separates application state for trusted accounts owned by one OS user; it is not a filesystem or OS security boundary.
 
 ## Why AgentShell
 
@@ -66,15 +74,30 @@ AgentShell is intentionally lighter than Docker. It separates application state 
 - **Native arguments preserved:** models, prompts, sandbox options, search, images, and future CLI flags pass through.
 - **Fast workstation resume:** existing `codexr`, `/rename`, partial-path search, and `codexmv` workflows remain available.
 - **Provider adapters:** Codex is fully integrated; Claude Code, Gemini CLI, and Copilot CLI receive named state roots.
-- **Safe installation:** no root privileges; unrelated commands and profile data are never overwritten.
+- **Safe installation:** no root or administrator privileges; unrelated commands and profile data are never overwritten.
 
 ## Quick start
+
+### Bash
 
 ```bash
 git clone https://github.com/lachlanchen/AgentShell.git
 cd AgentShell
 ./install.sh
 . "$HOME/.bashrc"
+
+agent-profile create personal
+codex --account personal login
+codex --account personal
+```
+
+### Windows PowerShell
+
+```powershell
+git clone https://github.com/lachlanchen/AgentShell.git
+Set-Location AgentShell
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+. $PROFILE
 
 agent-profile create personal
 codex --account personal login
@@ -101,8 +124,14 @@ codexr --account company --all
 
 Dedicate a terminal to one account:
 
+```text
+cd /path/to/project                 # Bash
+Set-Location C:\path\to\project    # Windows PowerShell
+```
+
+Then enter the account shell:
+
 ```bash
-cd /path/to/project
 agentshell lab
 
 # The prompt now starts with [agent:lab].
@@ -156,6 +185,8 @@ Inside Codex, `/status` remains the authoritative view of the authenticated iden
 
 ## Resume and migrate sessions
 
+AgentShell preserves existing workstation `codexr` and `codexmv` wrappers. On Windows without a separate `codexr`, it falls back to `codex resume`; workstation-only picker flags and `codexmv` require those pre-existing wrappers.
+
 ```bash
 # Exact current directory
 codexr --account personal
@@ -186,12 +217,16 @@ Provider details and limitations are documented in [docs/providers.md](docs/prov
 | Path | Purpose |
 |---|---|
 | [bin/agentshell](bin/agentshell) | Dependency-light profile runtime and command dispatcher |
+| [bin/agentshell.ps1](bin/agentshell.ps1) | Windows PowerShell profile runtime and command dispatcher |
 | [shell/agentshell.bash](shell/agentshell.bash) | Opt-in Bash interception for leading account options |
+| [shell/agentshell.ps1](shell/agentshell.ps1) | PowerShell interception and account-shell integration |
 | [install.sh](install.sh) | Idempotent current-user installer |
+| [install.ps1](install.ps1) | Idempotent Windows current-user installer |
 | [docs/tutorial.md](docs/tutorial.md) | Complete start-to-finish tutorial |
 | [docs/architecture.md](docs/architecture.md) | State boundaries, inheritance, and safety design |
 | [docs/providers.md](docs/providers.md) | Codex, Claude, Gemini, and Copilot adapters |
 | [tests/test.sh](tests/test.sh) | Isolated integration tests |
+| [tests/test.ps1](tests/test.ps1) | Windows PowerShell 5.1 integration tests |
 | [SECURITY.md](SECURITY.md) | Credential and disclosure guidance |
 
 ## Installation layout
@@ -201,6 +236,15 @@ Provider details and limitations are documented in [docs/providers.md](docs/prov
 ~/.local/bin/agent-*                     commands
 ~/scripts/sourced_agent_shell.sh         Bash integration
 ~/.local/share/agentshell/profiles/      private profile state
+```
+
+On Windows, the default current-user layout is:
+
+```text
+%LOCALAPPDATA%\AgentShell\lib\agentshell.ps1    runtime
+%LOCALAPPDATA%\AgentShell\bin\*.cmd, *.ps1      command launchers
+%LOCALAPPDATA%\AgentShell\shell\agentshell.ps1  PowerShell integration
+%LOCALAPPDATA%\AgentShell\profiles\     private profile state
 ```
 
 AgentShell keeps `HOME`, `PWD`, Git credentials, and the real filesystem unchanged. Authored settings and skills may be inherited, but known provider credentials and histories are never copied into a new profile.
@@ -218,12 +262,26 @@ bash tests/test.sh
 git diff --check
 ```
 
+Windows PowerShell update and validation:
+
+```powershell
+Set-Location "$HOME\Projects\AgentShell"
+git pull --rebase
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
+. $PROFILE
+
+agentshell -v
+agent-profile list
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\tests\test.ps1
+git diff --check
+```
+
 ## Security scope
 
 - Never commit profile homes, `auth.json`, tokens, cookies, SQLite databases, or private environment files.
 - Shared history intentionally exposes indexed session titles, previews, and paths to each participating profile.
 - Inherited API-token variables are cleared unless a profile explicitly opts in.
-- Use separate Unix users, machines, or externally enforced containers for mutually untrusted people.
+- Use separate OS users, machines, or externally enforced containers for mutually untrusted people.
 
 See [SECURITY.md](SECURITY.md) and [docs/architecture.md](docs/architecture.md).
 
@@ -242,7 +300,7 @@ If you use AgentShell in research or tooling, cite the repository. GitHub reads 
 
 ## Status and license
 
-AgentShell is an actively maintained, dependency-light Bash utility. Codex is the primary verified integration; other provider adapters follow their documented state-directory controls. Licensed under the [MIT License](LICENSE).
+AgentShell is an actively maintained, dependency-light Bash and Windows PowerShell utility. Codex is the primary verified integration; other provider adapters follow their documented state-directory controls. Licensed under the [MIT License](LICENSE).
 
 ## Links
 
