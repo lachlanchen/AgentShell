@@ -78,7 +78,7 @@ test -f "$profile/codex-shared-home/.account-state-v1"
 test -f "$profile/codex-shared-home/config.toml"
 test ! -L "$profile/codex-shared-home/config.toml"
 grep -q '^History mode:   shared$' <<<"$(agentshell status alpha)"
-grep -q '^AgentShell 0.3.0$' <<<"$(agentshell --version)"
+grep -q '^AgentShell 0.4.0$' <<<"$(agentshell --version)"
 
 # Optional Bash interception changes only calls that explicitly name an account.
 alias cr='printf existing-cr'

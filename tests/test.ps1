@@ -19,10 +19,12 @@ $environmentNames = @(
     'AGENT_SHELL_HOME', 'AGENT_SHELL_INSTALL_ROOT', 'AGENT_SHELL_BIN_DIR',
     'AGENT_SHELL_POWERSHELL_HELPER', 'AGENT_SHELL_POWERSHELL_PROFILE',
     'AGENT_SHELL_BASE_CODEX_HOME', 'AGENT_SHELL_SHARED_CODEX_SQLITE_HOME',
+    'AGENT_SHELL_SHARED_CODEX_HOME',
     'AGENT_SHELL_CODEX_WRAPPER', 'AGENT_SHELL_USE_CODEX_WRAPPER',
     'AGENT_SHELL_PRESERVE_AUTH_ENV', 'AGENT_SHELL_ACCOUNT',
     'AGENT_SHELL_PROFILE_ROOT', 'AGENT_SHELL_PROFILE_ENV',
     'AGENT_SHELL_CODEX_HISTORY_MODE', 'AGENT_SHELL_CODEX_SQLITE_HOME',
+    'AGENT_SHELL_CODEX_HOME',
     'AGENT_TEST_OUTPUT', 'AGENT_TEST_PROFILE_ONLY', 'CODEX_HOME', 'CODEX_SQLITE_HOME',
     'CODEX_API_KEY', 'CODEX_ACCESS_TOKEN', 'OPENAI_API_KEY',
     'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN',
@@ -187,11 +189,15 @@ function Assert-AccountEnvironment {
     param(
         [PSCustomObject]$Invocation,
         [string]$Account,
-        [string]$ExpectedSqliteHome
+        [string]$ExpectedSqliteHome,
+        [string]$ExpectedCodexHome = ''
     )
     $profileRoot = Join-Path (Join-Path $env:AGENT_SHELL_HOME 'profiles') $Account
+    if ([string]::IsNullOrWhiteSpace($ExpectedCodexHome)) {
+        $ExpectedCodexHome = Join-Path $profileRoot 'codex-home'
+    }
     Assert-Equal $Account $Invocation.Values['env.AGENT_SHELL_ACCOUNT'] 'selected account'
-    Assert-PathEqual (Join-Path $profileRoot 'codex-home') $Invocation.Values['env.CODEX_HOME'] 'profile CODEX_HOME'
+    Assert-PathEqual $ExpectedCodexHome $Invocation.Values['env.CODEX_HOME'] 'profile CODEX_HOME'
     Assert-PathEqual $ExpectedSqliteHome $Invocation.Values['env.CODEX_SQLITE_HOME'] 'profile CODEX_SQLITE_HOME'
 
     foreach ($name in @(
@@ -329,7 +335,8 @@ try {
     $env:AGENT_TEST_OUTPUT = Join-Path $testRoot 'native invocation.txt'
     foreach ($name in @(
         'AGENT_SHELL_ACCOUNT', 'AGENT_SHELL_PROFILE_ROOT', 'AGENT_SHELL_PROFILE_ENV',
-        'AGENT_SHELL_CODEX_HISTORY_MODE', 'AGENT_SHELL_CODEX_SQLITE_HOME'
+        'AGENT_SHELL_CODEX_HISTORY_MODE', 'AGENT_SHELL_CODEX_SQLITE_HOME',
+        'AGENT_SHELL_CODEX_HOME'
     )) {
         [Environment]::SetEnvironmentVariable($name, $null, 'Process')
     }
@@ -454,6 +461,7 @@ exit `$LASTEXITCODE
     $statusOutput = @(agentshell status)
     Assert-False ($statusOutput.Count -gt 0 -and $statusOutput[$statusOutput.Count - 1] -is [int]) 'interactive agentshell must not print its internal exit code'
     Assert-Equal 0 $LASTEXITCODE 'interactive agentshell status exit code'
+    Assert-True (@(agentshell --version) -contains 'AgentShell 0.4.0') 'installed AgentShell version'
 
     $env:CODEX_HOME = Join-Path $testRoot 'Ordinary Codex Home'
     $env:CODEX_SQLITE_HOME = Join-Path $testRoot 'Ordinary SQLite Home'
@@ -531,12 +539,15 @@ exit `$LASTEXITCODE
     Assert-Sequence @($oldPath, $newPath, '--latest') $invocation.Arguments 'account codexmv argv'
     Assert-AccountEnvironment $invocation 'personal' $privateSqliteHome
 
-    # History routing changes only the SQLite state root; authentication and
-    # CODEX_HOME remain profile-local.
+    # Shared history keeps authentication profile-local while making the
+    # SQLite index and source-rollout tree coherent.
     Invoke-AgentCommand $agentProfileCommand @('history', 'personal', 'shared') | Out-Null
     $invocation = Invoke-AndReadNative { codex '--account' 'personal' '--version' }
-    Assert-AccountEnvironment $invocation 'personal' $sharedSqliteHome
-    Assert-PathEqual (Join-Path $personalRoot 'codex-home') $invocation.Values['env.CODEX_HOME'] 'shared history must not share credentials'
+    $sharedCodexView = Join-Path $personalRoot 'codex-shared-home'
+    Assert-AccountEnvironment $invocation 'personal' $sharedSqliteHome $sharedCodexView
+    Assert-True (Test-Path -LiteralPath (Join-Path $sharedCodexView 'sessions') -PathType Container) 'shared history view must expose sessions'
+    Assert-False (Test-Path -LiteralPath (Join-Path $sharedCodexView 'auth.json')) 'shared history must not copy the ordinary Codex credential'
+    Assert-True (Test-Path -LiteralPath (Join-Path $sharedCodexView '.history-root-v1') -PathType Leaf) 'shared history view must record its source root'
 
     Invoke-AgentCommand $agentProfileCommand @('history', 'personal', 'private') | Out-Null
     $invocation = Invoke-AndReadNative { codex '--account' 'personal' '--version' }

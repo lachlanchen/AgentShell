@@ -3,7 +3,7 @@
 
 set -euo pipefail
 
-AGENT_SHELL_VERSION="0.3.0"
+AGENT_SHELL_VERSION="0.4.0"
 agent_shell_program="$(basename -- "$0")"
 agent_shell_self="$(readlink -f -- "${BASH_SOURCE[0]}")"
 agent_shell_data_home="${AGENT_SHELL_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/agentshell}"
@@ -97,7 +97,7 @@ agent_shell_shared_sqlite_home() {
 }
 
 agent_shell_shared_codex_home() {
-  printf '%s\n' "${AGENT_SHELL_SHARED_CODEX_HOME:-${AGENT_SHELL_BASE_CODEX_HOME:-$HOME/.codex}}"
+  printf '%s\n' "${AGENT_SHELL_SHARED_CODEX_HOME:-$(agent_shell_shared_sqlite_home)}"
 }
 
 agent_shell_codex_sqlite_home() {

@@ -28,7 +28,7 @@ agent-profile history personal shared
 
 Shared history allows accounts to discover and resume the same indexed sessions. It also means a lab or company profile can see local titles/previews and rollout paths from that shared history, so private mode is the safer default.
 
-Older AgentShell versions wrote a small number of rollouts into profile-local trees even when SQLite was shared. AgentShell 0.3 resolves a credential-isolated history view over the selected legacy tree instead of moving or rewriting those rollouts. New shared-mode sessions use the common tree. Cross-tree lineage should be recovered only after confirming that every source rollout is inactive; AgentShell never rewrites rollout JSONL or live SQLite state.
+Older AgentShell versions wrote a small number of rollouts into profile-local trees even when SQLite was shared. AgentShell 0.4 resolves a credential-isolated history view over the selected legacy tree instead of moving or rewriting those rollouts. New shared-mode sessions use the common tree. Cross-tree lineage should be recovered only after confirming that every source rollout is inactive; AgentShell never rewrites rollout JSONL or live SQLite state.
 
 The default data roots are platform-specific but contain the same profile layout:
 
@@ -38,6 +38,7 @@ The default data roots are platform-specific but contain the same profile layout
 | Windows PowerShell | `%LOCALAPPDATA%\AgentShell` | `$HOME\.codex` |
 
 `AGENT_SHELL_HOME` can select a different AgentShell data root when required.
+`AGENT_SHELL_SHARED_CODEX_SQLITE_HOME` selects the shared base, and the rollout tree follows it by default. Set `AGENT_SHELL_SHARED_CODEX_HOME` only when the shared Codex files intentionally live at a different path.
 
 ## What is shared
 

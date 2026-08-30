@@ -626,7 +626,7 @@ A new private profile may have no SQLite database until Codex creates state ther
 
 ### `invalid paginated history lineage ... missing source rollout`
 
-Upgrade and reinstall AgentShell 0.3 or newer:
+Upgrade and reinstall AgentShell 0.4 or newer:
 
 ```bash
 cd "$HOME/ProjectsLFS/AgentShell"
@@ -635,7 +635,7 @@ git pull --rebase
 agentshell --version company
 ```
 
-The failure means an older shared profile exposed the common SQLite catalog through `CODEX_SQLITE_HOME` but still pointed `CODEX_HOME/sessions` at a profile-local rollout tree. The picker therefore found the requested thread while Codex could not locate its immutable paginated source rollout. AgentShell 0.3 gives the selected account a credential-isolated view over the rollout tree recorded in SQLite. It does not rewrite JSONL histories or the live database.
+The failure means an older shared profile exposed the common SQLite catalog through `CODEX_SQLITE_HOME` but still pointed `CODEX_HOME/sessions` at a profile-local rollout tree. The picker therefore found the requested thread while Codex could not locate its immutable paginated source rollout. AgentShell 0.4 gives the selected account a credential-isolated view over the rollout tree recorded in SQLite. It does not rewrite JSONL histories or the live database.
 
 Already-open AgentShell terminals do not need to be closed: the workstation wrapper refreshes the effective history view on its next `codex`, `codexr`, or `codexmv` invocation. Do not manually move a rollout that is owned by a live Codex process.
 

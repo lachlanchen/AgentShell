@@ -246,7 +246,9 @@ On Windows, the default current-user layout is:
 %LOCALAPPDATA%\AgentShell\lib\agentshell.ps1    runtime
 %LOCALAPPDATA%\AgentShell\bin\*.cmd, *.ps1      command launchers
 %LOCALAPPDATA%\AgentShell\shell\agentshell.ps1  PowerShell integration
-%LOCALAPPDATA%\AgentShell\profiles\     private profile state
+%LOCALAPPDATA%\AgentShell\profiles\             private profile state
+  ACCOUNT\codex-home\                            private-mode and legacy state
+  ACCOUNT\codex-shared-home\                     shared-mode account/history view
 ```
 
 AgentShell keeps `HOME`, `PWD`, Git credentials, and the real filesystem unchanged. Authored settings and skills may be inherited, but known provider credentials and histories are never copied into a new profile.

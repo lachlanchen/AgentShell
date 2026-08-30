@@ -10,7 +10,7 @@ param(
 
 Set-StrictMode -Version 2.0
 
-$script:AgentShellVersion = '0.3.0'
+$script:AgentShellVersion = '0.4.0'
 $script:AgentShellExitCode = 0
 $script:AgentShellRuntimePath = $PSCommandPath
 $script:AgentShellDataHome = if (-not [string]::IsNullOrWhiteSpace($env:AGENT_SHELL_HOME)) {
@@ -56,6 +56,7 @@ Usage:
   agent-run --account ACCOUNT TOOL [ARG...]
   agent-profile create|list|show|status|login|aliases ACCOUNT [TOOL]
   agent-profile history ACCOUNT [private|shared]
+  agent-profile codex-home ACCOUNT [ROLLOUT_PATH]
 
 Codex shortcuts after PowerShell integration is loaded:
   codex   --account ACCOUNT [CODEX_ARG...]
@@ -109,6 +110,13 @@ function Get-AgentShellSharedSqliteHome {
         return [IO.Path]::GetFullPath($env:AGENT_SHELL_SHARED_CODEX_SQLITE_HOME)
     }
     return Get-AgentShellBaseCodexHome
+}
+
+function Get-AgentShellSharedCodexHome {
+    if (-not [string]::IsNullOrWhiteSpace($env:AGENT_SHELL_SHARED_CODEX_HOME)) {
+        return [IO.Path]::GetFullPath($env:AGENT_SHELL_SHARED_CODEX_HOME)
+    }
+    return Get-AgentShellSharedSqliteHome
 }
 
 function Get-AgentShellProfileValue {
@@ -186,6 +194,158 @@ function Copy-AgentShellCodexConfig {
     if (-not (Test-Path -LiteralPath $Source -PathType Leaf) -or (Test-Path -LiteralPath $Destination)) { return }
     $lines = @([IO.File]::ReadAllLines($Source) | Where-Object { $_ -notmatch '^\s*sqlite_home\s*=' })
     [IO.File]::WriteAllLines($Destination, $lines, $script:AgentShellUtf8NoBom)
+}
+
+function Test-AgentShellPathWithin {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Root
+    )
+    $resolvedPath = [IO.Path]::GetFullPath($Path)
+    $resolvedRoot = [IO.Path]::GetFullPath($Root).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+    return $resolvedPath.StartsWith($resolvedRoot, [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-AgentShellHistoryHomeForRollout {
+    param([Parameter(Mandatory = $true)][string]$RolloutPath)
+
+    $candidates = New-Object Collections.Generic.List[string]
+    $candidates.Add((Get-AgentShellSharedCodexHome))
+    if (Test-Path -LiteralPath $script:AgentShellProfilesDirectory -PathType Container) {
+        foreach ($profile in @(Get-ChildItem -LiteralPath $script:AgentShellProfilesDirectory -Directory -Force)) {
+            $candidate = Join-Path $profile.FullName 'codex-home'
+            if (Test-Path -LiteralPath $candidate -PathType Container) { $candidates.Add($candidate) }
+        }
+    }
+
+    foreach ($candidate in $candidates) {
+        if ((Test-AgentShellPathWithin $RolloutPath (Join-Path $candidate 'sessions')) -or
+            (Test-AgentShellPathWithin $RolloutPath (Join-Path $candidate 'archived_sessions'))) {
+            return [IO.Path]::GetFullPath($candidate)
+        }
+    }
+    return [IO.Path]::GetFullPath((Get-AgentShellSharedCodexHome))
+}
+
+function Initialize-AgentShellSharedAccountState {
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    $root = Get-AgentShellProfileRoot $Name
+    $identity = Join-Path $root 'codex-home'
+    $accountView = Join-Path $root 'codex-shared-home'
+    $marker = Join-Path $accountView '.account-state-v1'
+    New-Item -ItemType Directory -Force -Path $identity, $accountView | Out-Null
+
+    if (-not (Test-Path -LiteralPath $marker -PathType Leaf)) {
+        foreach ($item in @('auth.json', 'config.toml', 'installation_id', 'internal_storage.json')) {
+            $source = Join-Path $identity $item
+            $destination = Join-Path $accountView $item
+            if ((Test-Path -LiteralPath $source -PathType Leaf) -and -not (Test-Path -LiteralPath $destination)) {
+                Copy-Item -LiteralPath $source -Destination $destination
+            }
+        }
+        [IO.File]::WriteAllText($marker, '', $script:AgentShellUtf8NoBom)
+    }
+
+    foreach ($item in @('AGENTS.md', 'skills', 'plugins', 'rules')) {
+        New-AgentShellSharedItem (Join-Path $identity $item) (Join-Path $accountView $item)
+    }
+    return $accountView
+}
+
+function Initialize-AgentShellCodexView {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$HistoryHome,
+        [Parameter(Mandatory = $true)][string]$View
+    )
+
+    $historyHomeFull = [IO.Path]::GetFullPath($HistoryHome)
+    $accountView = Initialize-AgentShellSharedAccountState $Name
+    New-Item -ItemType Directory -Force -Path $historyHomeFull, $View | Out-Null
+    $historyMarker = Join-Path $View '.history-root-v1'
+    $pendingMarker = Join-Path $View '.history-root-v1.pending'
+    $viewOwned = Test-Path -LiteralPath $historyMarker -PathType Leaf
+    if ($viewOwned) {
+        $recorded = [IO.File]::ReadAllText($historyMarker).Trim()
+        if (-not [string]::Equals([IO.Path]::GetFullPath($recorded), $historyHomeFull, [StringComparison]::OrdinalIgnoreCase)) {
+            Throw-AgentShellError "history view points at an unexpected root: $View"
+        }
+    } elseif (Test-Path -LiteralPath $pendingMarker -PathType Leaf) {
+        $recorded = [IO.File]::ReadAllText($pendingMarker).Trim()
+        if (-not [string]::Equals([IO.Path]::GetFullPath($recorded), $historyHomeFull, [StringComparison]::OrdinalIgnoreCase)) {
+            Throw-AgentShellError "incomplete history view points at an unexpected root: $View"
+        }
+        $viewOwned = $true
+    } else {
+        foreach ($item in @('sessions', 'archived_sessions', 'attachments', 'generated_images', 'shell_snapshots', 'thread-writer-locks', 'history.jsonl', 'session_index.jsonl')) {
+            if (Test-Path -LiteralPath (Join-Path $View $item)) {
+                Throw-AgentShellError "refusing existing unowned history path: $(Join-Path $View $item)"
+            }
+        }
+        [IO.File]::WriteAllText($pendingMarker, $historyHomeFull, $script:AgentShellUtf8NoBom)
+        $viewOwned = $true
+    }
+
+    foreach ($item in @('sessions', 'archived_sessions', 'attachments', 'generated_images', 'shell_snapshots', 'thread-writer-locks')) {
+        $source = Join-Path $historyHomeFull $item
+        $destination = Join-Path $View $item
+        New-Item -ItemType Directory -Force -Path $source | Out-Null
+        if (Test-Path -LiteralPath $destination) {
+            if (-not $viewOwned) { Throw-AgentShellError "refusing existing unowned history path: $destination" }
+        } else {
+            New-Item -ItemType Junction -Path $destination -Target $source -ErrorAction Stop | Out-Null
+        }
+    }
+
+    foreach ($item in @('history.jsonl', 'session_index.jsonl')) {
+        $source = Join-Path $historyHomeFull $item
+        $destination = Join-Path $View $item
+        if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+            [IO.File]::WriteAllText($source, '', $script:AgentShellUtf8NoBom)
+        }
+        if (Test-Path -LiteralPath $destination) {
+            if (-not $viewOwned) { Throw-AgentShellError "refusing existing unowned history file: $destination" }
+        } else {
+            New-Item -ItemType HardLink -Path $destination -Target $source -ErrorAction Stop | Out-Null
+        }
+    }
+
+    if (-not [string]::Equals([IO.Path]::GetFullPath($View), [IO.Path]::GetFullPath($accountView), [StringComparison]::OrdinalIgnoreCase)) {
+        foreach ($item in @('auth.json', 'config.toml', 'installation_id', 'internal_storage.json', 'AGENTS.md', 'skills', 'plugins', 'rules')) {
+            New-AgentShellSharedItem (Join-Path $accountView $item) (Join-Path $View $item)
+        }
+    }
+    [IO.File]::WriteAllText($historyMarker, $historyHomeFull, $script:AgentShellUtf8NoBom)
+    Remove-Item -LiteralPath $pendingMarker -Force -ErrorAction SilentlyContinue
+}
+
+function Get-AgentShellCodexHome {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [string]$RolloutPath = ''
+    )
+
+    $root = Get-AgentShellProfileRoot $Name
+    if ((Get-AgentShellHistoryMode $Name) -ne 'shared') {
+        return Join-Path $root 'codex-home'
+    }
+
+    $sharedHome = [IO.Path]::GetFullPath((Get-AgentShellSharedCodexHome))
+    $historyHome = if ([string]::IsNullOrWhiteSpace($RolloutPath)) {
+        $sharedHome
+    } else {
+        Get-AgentShellHistoryHomeForRollout $RolloutPath
+    }
+    if ([string]::Equals([IO.Path]::GetFullPath($historyHome), $sharedHome, [StringComparison]::OrdinalIgnoreCase)) {
+        $view = Join-Path $root 'codex-shared-home'
+    } else {
+        $sourceName = Split-Path (Split-Path $historyHome -Parent) -Leaf
+        [void](Test-AgentShellProfileName $sourceName)
+        $view = Join-Path (Join-Path $root 'codex-history-views') $sourceName
+    }
+    Initialize-AgentShellCodexView $Name $historyHome $view
+    return $view
 }
 
 function Write-AgentShellCommandShim {
@@ -310,6 +470,7 @@ function Set-AgentShellProfileEnvironment {
     $envFile = Join-Path $root 'env.ps1'
     $historyMode = Get-AgentShellHistoryMode $Name
     $sqliteHome = Get-AgentShellSqliteHome $Name
+    $codexHome = Get-AgentShellCodexHome $Name
     New-Item -ItemType Directory -Force -Path $sqliteHome | Out-Null
 
     if ($env:AGENT_SHELL_PRESERVE_AUTH_ENV -ne '1') {
@@ -327,7 +488,8 @@ function Set-AgentShellProfileEnvironment {
         AGENT_SHELL_PROFILE_ENV = $envFile
         AGENT_SHELL_CODEX_HISTORY_MODE = $historyMode
         AGENT_SHELL_CODEX_SQLITE_HOME = $sqliteHome
-        CODEX_HOME = (Join-Path $root 'codex-home')
+        AGENT_SHELL_CODEX_HOME = $codexHome
+        CODEX_HOME = $codexHome
         CODEX_SQLITE_HOME = $sqliteHome
         CLAUDE_CONFIG_DIR = (Join-Path $root 'claude-home')
         GEMINI_CLI_HOME = (Join-Path $root 'gemini-home')
@@ -343,6 +505,7 @@ function Set-AgentShellProfileEnvironment {
         Root = $root
         HistoryMode = $historyMode
         SqliteHome = $sqliteHome
+        CodexHome = $codexHome
     }
 }
 
@@ -444,10 +607,12 @@ function Show-AgentShellProfile {
     $root = Initialize-AgentShellProfile $Name
     $mode = Get-AgentShellHistoryMode $Name
     $sqliteHome = Get-AgentShellSqliteHome $Name
+    $codexHome = Get-AgentShellCodexHome $Name
     @(
         "Account:       $Name",
         "Profile root:  $root",
-        "Codex home:    $(Join-Path $root 'codex-home')",
+        "Codex home:    $codexHome",
+        "Account state: $(Join-Path $root 'codex-home')",
         "History mode:  $mode",
         "SQLite home:   $sqliteHome",
         "Claude home:   $(Join-Path $root 'claude-home')",
@@ -462,7 +627,8 @@ function Show-AgentShellProfileList {
     '{0,-24} {1,-12} {2,-9} {3}' -f 'ACCOUNT', 'CODEX LOGIN', 'HISTORY', 'STATE'
     if (-not (Test-Path -LiteralPath $script:AgentShellProfilesDirectory -PathType Container)) { return }
     foreach ($directory in @(Get-ChildItem -LiteralPath $script:AgentShellProfilesDirectory -Directory -Force | Sort-Object Name)) {
-        $login = if (Test-Path -LiteralPath (Join-Path $directory.FullName 'codex-home\auth.json') -PathType Leaf) { 'saved' } else { 'not logged in' }
+        $codexHome = Get-AgentShellCodexHome $directory.Name
+        $login = if (Test-Path -LiteralPath (Join-Path $codexHome 'auth.json') -PathType Leaf) { 'saved' } else { 'not logged in' }
         '{0,-24} {1,-12} {2,-9} {3}' -f $directory.Name, $login, (Get-AgentShellHistoryMode $directory.Name), $directory.FullName
     }
 }
@@ -477,9 +643,11 @@ function Set-AgentShellHistoryMode {
     if ($Mode -notin @('private', 'shared')) { Throw-AgentShellError 'history mode must be private or shared' }
     Set-AgentShellProfileValue $Name 'codex_history' $Mode
     $sqliteHome = Get-AgentShellSqliteHome $Name
+    $codexHome = Get-AgentShellCodexHome $Name
     New-Item -ItemType Directory -Force -Path $sqliteHome | Out-Null
     "AgentShell account $Name now uses $Mode Codex history."
     "SQLite home: $sqliteHome"
+    "Codex home: $codexHome"
 }
 
 function Show-AgentShellStatus {
@@ -492,11 +660,12 @@ function Show-AgentShellStatus {
         return
     }
     $root = Initialize-AgentShellProfile $Name
-    $login = if (Test-Path -LiteralPath (Join-Path $root 'codex-home\auth.json') -PathType Leaf) { 'saved' } else { 'not logged in' }
+    $codexHome = Get-AgentShellCodexHome $Name
+    $login = if (Test-Path -LiteralPath (Join-Path $codexHome 'auth.json') -PathType Leaf) { 'saved' } else { 'not logged in' }
     "Current account: $Name"
     "Codex login:    $login"
     "History mode:   $(Get-AgentShellHistoryMode $Name)"
-    "Codex home:     $(Join-Path $root 'codex-home')"
+    "Codex home:     $codexHome"
     "SQLite home:    $(Get-AgentShellSqliteHome $Name)"
     "Working dir:    $((Get-Location).Path)"
 }
@@ -512,6 +681,12 @@ function Invoke-AgentShellProfileCommand {
         'create' { if ([string]::IsNullOrWhiteSpace($name)) { Throw-AgentShellError 'profile create requires ACCOUNT' }; Show-AgentShellProfile $name; return }
         'show' { if ([string]::IsNullOrWhiteSpace($name)) { Throw-AgentShellError 'profile show requires ACCOUNT' }; Show-AgentShellProfile $name; return }
         'history' { if ([string]::IsNullOrWhiteSpace($name)) { Throw-AgentShellError 'profile history requires ACCOUNT' }; Set-AgentShellHistoryMode $name $third; return }
+        'codex-home' {
+            if ([string]::IsNullOrWhiteSpace($name)) { Throw-AgentShellError 'profile codex-home requires ACCOUNT' }
+            [void](Initialize-AgentShellProfile $name)
+            Get-AgentShellCodexHome $name $third | Write-Output
+            return
+        }
         'aliases' {
             if ([string]::IsNullOrWhiteSpace($name)) { Throw-AgentShellError 'profile aliases requires ACCOUNT' }
             [void](Initialize-AgentShellProfile $name)

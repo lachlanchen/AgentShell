@@ -2,12 +2,12 @@
 
 ## Codex
 
-Codex is the primary integration. Each account gets independent authentication, SQLite state, logs, and sessions through `CODEX_HOME` and `CODEX_SQLITE_HOME`.
+Codex is the primary integration. Each account gets independent authentication through `CODEX_HOME`; SQLite and rollout history can remain private or be exposed together through a coherent shared view.
 
-Each profile chooses one of two SQLite modes:
+Each profile chooses one of two history modes:
 
-- `private`: profile-local index; strongest separation and the default.
-- `shared`: one existing Codex index for cross-account `codexr` and `codexmv` workflows.
+- `private`: profile-local index and rollout tree; strongest separation and the default.
+- `shared`: one existing Codex index and rollout tree for cross-account resume workflows.
 
 ```bash
 agent-profile history personal shared
