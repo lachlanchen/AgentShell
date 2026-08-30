@@ -27,6 +27,7 @@ Usage:
   agent-run --account ACCOUNT TOOL [ARG...]
   agent-profile create|list|show|status|login|aliases ACCOUNT [TOOL]
   agent-profile history ACCOUNT [private|shared]
+  agent-profile codex-home ACCOUNT [ROLLOUT_PATH]
 
 Codex shortcuts:
   agent-codex   --account ACCOUNT [CODEX_ARG...]
@@ -95,6 +96,10 @@ agent_shell_shared_sqlite_home() {
   printf '%s\n' "${AGENT_SHELL_SHARED_CODEX_SQLITE_HOME:-${AGENT_SHELL_BASE_CODEX_HOME:-$HOME/.codex}}"
 }
 
+agent_shell_shared_codex_home() {
+  printf '%s\n' "${AGENT_SHELL_SHARED_CODEX_HOME:-${AGENT_SHELL_BASE_CODEX_HOME:-$HOME/.codex}}"
+}
+
 agent_shell_codex_sqlite_home() {
   local name="$1" root
   root="$(agent_shell_profile_root "$name")"
@@ -106,11 +111,12 @@ agent_shell_codex_sqlite_home() {
 }
 
 agent_shell_safe_link() {
-  local target="$1" link="$2" current=""
+  local target="$1" link="$2" current="" expected=""
   mkdir -p -- "$(dirname -- "$link")"
   if [ -L "$link" ]; then
-    current="$(readlink -f -- "$link" 2>/dev/null || true)"
-    if [ "$current" = "$(readlink -f -- "$target")" ]; then
+    current="$(realpath -m -- "$link")"
+    expected="$(realpath -m -- "$target")"
+    if [ "$current" = "$expected" ]; then
       return 0
     fi
     printf 'AgentShell warning: keeping unrelated symlink: %s -> %s\n' "$link" "$(readlink -- "$link")" >&2
@@ -121,6 +127,144 @@ agent_shell_safe_link() {
     return 1
   fi
   ln -s -- "$target" "$link"
+}
+
+agent_shell_history_home_for_rollout() {
+  local rollout_path="$1" shared_home candidate resolved_rollout resolved_candidate
+  shared_home="$(agent_shell_shared_codex_home)"
+  resolved_rollout="$(realpath -m -- "$rollout_path")"
+
+  for candidate in "$shared_home" "$agent_shell_profiles_dir"/*/codex-home; do
+    [ -d "$candidate" ] || continue
+    resolved_candidate="$(realpath -m -- "$candidate")"
+    case "$resolved_rollout" in
+      "$resolved_candidate"/sessions/*|"$resolved_candidate"/archived_sessions/*)
+        printf '%s\n' "$resolved_candidate"
+        return 0
+        ;;
+    esac
+  done
+
+  # Unknown or newly introduced rollout locations use the configured shared
+  # store. The caller still passes the exact UUID to native Codex.
+  printf '%s\n' "$(realpath -m -- "$shared_home")"
+}
+
+agent_shell_materialize_account_file() {
+  local source="$1" destination="$2" mode="${3:-600}" temporary current expected
+  [ -f "$source" ] || return 0
+  if [ -e "$destination" ] && [ ! -L "$destination" ]; then
+    return 0
+  fi
+  if [ -L "$destination" ]; then
+    current="$(realpath -m -- "$destination")"
+    expected="$(realpath -m -- "$source")"
+    if [ "$current" != "$expected" ]; then
+      printf 'AgentShell warning: keeping unrelated account-state symlink: %s -> %s\n' \
+        "$destination" "$(readlink -- "$destination")" >&2
+      return 1
+    fi
+  fi
+  temporary="$(mktemp "$(dirname -- "$destination")/.account-file.XXXXXX")"
+  cp -L -- "$source" "$temporary"
+  chmod "$mode" "$temporary"
+  mv -T -- "$temporary" "$destination"
+}
+
+agent_shell_prepare_shared_account_state() {
+  local name="$1" root identity account_view marker item
+  root="$(agent_shell_profile_root "$name")"
+  identity="$root/codex-home"
+  account_view="$root/codex-shared-home"
+  marker="$account_view/.account-state-v1"
+  mkdir -p -- "$identity" "$account_view"
+
+  if [ ! -e "$marker" ]; then
+    # Materialize credentials in the shared account view once. A regular file
+    # is intentional: `codex logout` may unlink auth.json, and a symlink would
+    # otherwise reveal the old target again on the next launch.
+    for item in auth.json config.toml installation_id internal_storage.json; do
+      if [ -f "$identity/$item" ]; then
+        agent_shell_materialize_account_file "$identity/$item" "$account_view/$item" 600
+      elif [ -L "$account_view/$item" ]; then
+        if [ "$(realpath -m -- "$account_view/$item")" = "$(realpath -m -- "$identity/$item")" ]; then
+          unlink -- "$account_view/$item"
+        else
+          printf 'AgentShell warning: keeping unrelated account-state symlink: %s -> %s\n' \
+            "$account_view/$item" "$(readlink -- "$account_view/$item")" >&2
+          return 1
+        fi
+      fi
+    done
+    : > "$marker"
+    chmod 600 "$marker"
+  fi
+
+  for item in AGENTS.md skills plugins rules; do
+    [ -e "$identity/$item" ] || [ -L "$identity/$item" ] || continue
+    agent_shell_safe_link "$identity/$item" "$account_view/$item"
+  done
+  printf '%s\n' "$account_view"
+}
+
+agent_shell_prepare_codex_view() {
+  local name="$1" history_home="$2" view="$3" root account_view item
+  root="$(agent_shell_profile_root "$name")"
+  history_home="$(realpath -m -- "$history_home")"
+  umask 077
+
+  account_view="$(agent_shell_prepare_shared_account_state "$name")"
+  mkdir -p -- "$view" "$history_home"
+
+  # These paths are part of a thread's durable history. They must resolve to
+  # one coherent tree because Codex paginated histories locate immutable
+  # source rollouts by scanning CODEX_HOME/sessions.
+  for item in sessions archived_sessions attachments generated_images shell_snapshots thread-writer-locks; do
+    mkdir -p -- "$history_home/$item"
+    agent_shell_safe_link "$history_home/$item" "$view/$item"
+  done
+  for item in history.jsonl session_index.jsonl; do
+    if [ ! -e "$history_home/$item" ]; then
+      : > "$history_home/$item"
+      chmod 600 "$history_home/$item"
+    fi
+    agent_shell_safe_link "$history_home/$item" "$view/$item"
+  done
+
+  # A legacy history view borrows account state from the canonical shared view,
+  # never from the account that originally created the selected rollout.
+  if [ "$view" != "$account_view" ]; then
+    for item in auth.json config.toml installation_id internal_storage.json AGENTS.md skills plugins rules; do
+      [ -e "$account_view/$item" ] || [ -L "$account_view/$item" ] || continue
+      agent_shell_safe_link "$account_view/$item" "$view/$item"
+    done
+  fi
+}
+
+agent_shell_codex_home() {
+  local name="$1" rollout_path="${2:-}" root history_home view source_name
+  root="$(agent_shell_profile_root "$name")"
+  if [ "$(agent_shell_history_mode "$name")" != "shared" ]; then
+    printf '%s/codex-home\n' "$root"
+    return 0
+  fi
+
+  if [ -n "$rollout_path" ]; then
+    history_home="$(agent_shell_history_home_for_rollout "$rollout_path")"
+  else
+    history_home="$(realpath -m -- "$(agent_shell_shared_codex_home)")"
+  fi
+
+  if [ "$history_home" = "$(realpath -m -- "$(agent_shell_shared_codex_home)")" ]; then
+    view="$root/codex-shared-home"
+  else
+    source_name="$(basename -- "$(dirname -- "$history_home")")"
+    agent_shell_validate_name "$source_name"
+    view="$root/codex-history-views/$source_name"
+  fi
+
+  agent_shell_prepare_codex_view "$name" "$history_home" "$view"
+  printf '%s\n' "$view"
 }
 
 agent_shell_link_shared_item() {
@@ -225,12 +369,13 @@ agent_shell_clear_inherited_auth() {
 }
 
 agent_shell_activate_profile() {
-  local name="$1" root env_file history_mode sqlite_home
+  local name="$1" root env_file history_mode sqlite_home codex_home
   agent_shell_create_profile "$name"
   root="$(agent_shell_profile_root "$name")"
   env_file="$root/env.sh"
   history_mode="$(agent_shell_history_mode "$name")"
   sqlite_home="$(agent_shell_codex_sqlite_home "$name")"
+  codex_home="$(agent_shell_codex_home "$name")"
   mkdir -p -- "$sqlite_home"
 
   agent_shell_clear_inherited_auth
@@ -246,7 +391,8 @@ agent_shell_activate_profile() {
   export AGENT_SHELL_PROFILE_ENV="$env_file"
   export AGENT_SHELL_CODEX_HISTORY_MODE="$history_mode"
   export AGENT_SHELL_CODEX_SQLITE_HOME="$sqlite_home"
-  export CODEX_HOME="$root/codex-home"
+  export AGENT_SHELL_CODEX_HOME="$codex_home"
+  export CODEX_HOME="$codex_home"
   export CODEX_SQLITE_HOME="$sqlite_home"
   export CLAUDE_CONFIG_DIR="$root/claude-home"
   export GEMINI_CLI_HOME="$root/gemini-home"
@@ -327,7 +473,7 @@ if [ -r "${AGENT_SHELL_PROFILE_ENV:-}" ]; then
   . "$AGENT_SHELL_PROFILE_ENV"
 fi
 
-export CODEX_HOME="$AGENT_SHELL_PROFILE_ROOT/codex-home"
+export CODEX_HOME="$AGENT_SHELL_CODEX_HOME"
 export CODEX_SQLITE_HOME="$AGENT_SHELL_CODEX_SQLITE_HOME"
 export CLAUDE_CONFIG_DIR="$AGENT_SHELL_PROFILE_ROOT/claude-home"
 export GEMINI_CLI_HOME="$AGENT_SHELL_PROFILE_ROOT/gemini-home"
@@ -349,7 +495,7 @@ agent_shell_open_shell() {
 }
 
 agent_shell_list_profiles() {
-  local name root codex_auth history_mode
+  local name root codex_home codex_auth history_mode
   printf '%-24s %-12s %-9s %s\n' 'ACCOUNT' 'CODEX LOGIN' 'HISTORY' 'STATE'
   if [ ! -d "$agent_shell_profiles_dir" ]; then
     return 0
@@ -357,23 +503,26 @@ agent_shell_list_profiles() {
   while IFS= read -r name; do
     [ -n "$name" ] || continue
     root="$(agent_shell_profile_root "$name")"
+    codex_home="$(agent_shell_codex_home "$name")"
     codex_auth='not logged in'
-    [ -s "$root/codex-home/auth.json" ] && codex_auth='saved'
+    [ -s "$codex_home/auth.json" ] && codex_auth='saved'
     history_mode="$(agent_shell_history_mode "$name")"
     printf '%-24s %-12s %-9s %s\n' "$name" "$codex_auth" "$history_mode" "$root"
   done < <(find "$agent_shell_profiles_dir" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | LC_ALL=C sort)
 }
 
 agent_shell_show_profile() {
-  local name="$1" root history_mode sqlite_home
+  local name="$1" root history_mode sqlite_home codex_home
   agent_shell_create_profile "$name"
   root="$(agent_shell_profile_root "$name")"
   history_mode="$(agent_shell_history_mode "$name")"
   sqlite_home="$(agent_shell_codex_sqlite_home "$name")"
+  codex_home="$(agent_shell_codex_home "$name")"
   cat <<EOF
 Account:       $name
 Profile root:  $root
-Codex home:    $root/codex-home
+Codex home:    $codex_home
+Account state: $root/codex-home
 History mode:  $history_mode
 SQLite home:   $sqlite_home
 Claude home:   $root/claude-home
@@ -385,7 +534,7 @@ EOF
 }
 
 agent_shell_set_history() {
-  local name="$1" mode="${2:-}" sqlite_home
+  local name="$1" mode="${2:-}" sqlite_home codex_home
   agent_shell_create_profile "$name"
   if [ -z "$mode" ]; then
     printf '%s\n' "$(agent_shell_history_mode "$name")"
@@ -397,13 +546,15 @@ agent_shell_set_history() {
   esac
   agent_shell_set_profile_value "$name" codex_history "$mode"
   sqlite_home="$(agent_shell_codex_sqlite_home "$name")"
+  codex_home="$(agent_shell_codex_home "$name")"
   mkdir -p -- "$sqlite_home"
   printf 'AgentShell account %s now uses %s Codex history.\n' "$name" "$mode"
   printf 'SQLite home: %s\n' "$sqlite_home"
+  printf 'Codex home: %s\n' "$codex_home"
 }
 
 agent_shell_runtime_status() {
-  local requested="${1:-}" account root history_mode sqlite_home login_state
+  local requested="${1:-}" account root history_mode sqlite_home codex_home login_state
   printf 'AgentShell %s\n' "$AGENT_SHELL_VERSION"
   account="$requested"
   [ -n "$account" ] || account="${AGENT_SHELL_ACCOUNT:-}"
@@ -417,12 +568,13 @@ agent_shell_runtime_status() {
   root="$(agent_shell_profile_root "$account")"
   history_mode="$(agent_shell_history_mode "$account")"
   sqlite_home="$(agent_shell_codex_sqlite_home "$account")"
+  codex_home="$(agent_shell_codex_home "$account")"
   login_state='not logged in'
-  [ -s "$root/codex-home/auth.json" ] && login_state='saved'
+  [ -s "$codex_home/auth.json" ] && login_state='saved'
   printf 'Current account: %s\n' "$account"
   printf 'Codex login:    %s\n' "$login_state"
   printf 'History mode:   %s\n' "$history_mode"
-  printf 'Codex home:     %s\n' "$root/codex-home"
+  printf 'Codex home:     %s\n' "$codex_home"
   printf 'SQLite home:    %s\n' "$sqlite_home"
   printf 'Working dir:    %s\n' "$(pwd -P)"
 }
@@ -485,6 +637,11 @@ agent_shell_profile_main() {
     history)
       [ -n "$name" ] || agent_shell_die 'profile history requires ACCOUNT'
       agent_shell_set_history "$name" "${3:-}"
+      ;;
+    codex-home)
+      [ -n "$name" ] || agent_shell_die 'profile codex-home requires ACCOUNT'
+      agent_shell_create_profile "$name"
+      agent_shell_codex_home "$name" "${3:-}"
       ;;
     status)
       [ -n "$name" ] || agent_shell_die 'profile status requires ACCOUNT'

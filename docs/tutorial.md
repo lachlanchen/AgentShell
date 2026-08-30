@@ -45,8 +45,20 @@ Run these from any current directory.
 On Bash:
 
 ```bash
+
+# wenjunyuan
 source ~/.bashrc
 agentshell personal
+codexr
+
+# lachlan.mia.chan
+source ~/.bashrc
+agentshell company
+codexr
+
+# lachlan.miao.chrn
+source ~/.bashrc
+agentshell lab
 codexr
 ```
 
@@ -222,12 +234,12 @@ This affects only `lab`; it does not log out `personal`, `company`, or ordinary 
 
 ## 4. Choose private or shared history
 
-Authentication and the SQLite session index are separate choices.
+Authentication and Codex history routing are separate choices.
 
-| Mode | Authentication | Resume index | Best for |
-|---|---|---|---|
-| `private` | Profile-local | Profile-local | Confidential separation |
-| `shared` | Profile-local | Shared default Codex index | Resuming the same workstation sessions with several accounts |
+| Mode | Authentication | Resume index | Rollout tree | Best for |
+|---|---|---|---|---|
+| `private` | Profile-local | Profile-local | Profile-local | Confidential separation |
+| `shared` | Profile-local | Shared default Codex index | Shared default Codex history | Resuming the same workstation sessions with several accounts |
 
 New profiles default to private history. Change a profile to shared history with:
 
@@ -252,12 +264,13 @@ agentshell status company
 
 In shared mode:
 
-- credentials remain in the named profile (`~/.local/share/agentshell/profiles/ACCOUNT/codex-home/` on Bash or `%LOCALAPPDATA%\AgentShell\profiles\ACCOUNT\codex-home\` on Windows);
+- credentials remain in the named profile;
 - the resume catalog is the default Codex index under `~/.codex` on Bash or `$HOME\.codex` on Windows;
+- `CODEX_HOME` is a generated `codex-shared-home` view whose history paths resolve to the default Codex history while authentication resolves to the selected account;
 - `codexr --account ACCOUNT` can discover established workstation sessions;
 - session titles, previews, and paths in that index are visible to every shared profile.
 
-Changing modes does not delete either history. It changes which SQLite location future commands use.
+Changing modes does not delete either history. It changes which compatible index-and-rollout view future commands use.
 
 ## 5. Start Codex with a selected account
 
@@ -611,6 +624,21 @@ agent-profile history personal shared
 
 A new private profile may have no SQLite database until Codex creates state there. The workstation wrapper falls back to the native picker rather than treating that as corruption.
 
+### `invalid paginated history lineage ... missing source rollout`
+
+Upgrade and reinstall AgentShell 0.3 or newer:
+
+```bash
+cd "$HOME/ProjectsLFS/AgentShell"
+git pull --rebase
+./install.sh
+agentshell --version company
+```
+
+The failure means an older shared profile exposed the common SQLite catalog through `CODEX_SQLITE_HOME` but still pointed `CODEX_HOME/sessions` at a profile-local rollout tree. The picker therefore found the requested thread while Codex could not locate its immutable paginated source rollout. AgentShell 0.3 gives the selected account a credential-isolated view over the rollout tree recorded in SQLite. It does not rewrite JSONL histories or the live database.
+
+Already-open AgentShell terminals do not need to be closed: the workstation wrapper refreshes the effective history view on its next `codex`, `codexr`, or `codexmv` invocation. Do not manually move a rollout that is owned by a live Codex process.
+
 ### The exact-directory picker shows no sessions
 
 ```bash
@@ -701,6 +729,7 @@ Important rules:
 
 - Do not upload `auth.json`, profile state, cookies, or tokens.
 - Shared history exposes indexed titles, previews, and paths to every profile using that index.
+- Shared mode keeps credentials profile-local while the generated Codex view exposes one coherent index and rollout tree.
 - AgentShell profiles are not an OS security boundary; all processes still run as the same OS user.
 - Use separate OS users or separately controlled machines for mutually untrusted people.
 - Prefer browser login. If an account-specific API variable is necessary, use that profile's private environment file rather than a public repository or shared shell profile: mode-0600 `env.sh` on Bash or `env.ps1` under the Windows profile directory.
@@ -793,6 +822,6 @@ powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 
 ## Official Codex basis
 
-Codex documents `CODEX_HOME` as the root for config, authentication, logs, sessions, and skills. It separately documents `CODEX_SQLITE_HOME` for SQLite-backed state. AgentShell uses that supported separation to keep each login private while optionally sharing the resume index:
+Codex documents `CODEX_HOME` as the root for config, authentication, logs, sessions, and skills. It separately documents `CODEX_SQLITE_HOME` for SQLite-backed state. AgentShell uses those supported controls to keep each login private while optionally presenting a coherent shared index and rollout tree:
 
 - [Official Codex environment variables](https://learn.chatgpt.com/docs/config-file/environment-variables)

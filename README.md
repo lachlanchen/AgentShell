@@ -69,7 +69,7 @@ AgentShell is intentionally lighter than Docker. It separates application state 
 ## Why AgentShell
 
 - **Independent authentication:** every label has its own Codex `auth.json` and provider state.
-- **Optional shared history:** accounts may resume one common Codex session index while credentials remain separate.
+- **Optional shared history:** accounts may resume one coherent Codex index and rollout tree while credentials remain separate.
 - **No workspace copies:** Git repositories, Conda environments, build tools, and files stay exactly where they are.
 - **Native arguments preserved:** models, prompts, sandbox options, search, images, and future CLI flags pass through.
 - **Fast workstation resume:** existing `codexr`, `/rename`, partial-path search, and `codexmv` workflows remain available.
@@ -153,10 +153,10 @@ The AgentShell `--account` option must appear first. Plain `codex`, `codexr`, an
 
 ## Private credentials, selectable history
 
-| History mode | Credentials | SQLite resume index | Recommended use |
-|---|---|---|---|
-| `private` | Profile-local | Profile-local | Confidential lab/company separation |
-| `shared` | Profile-local | Shared base index | Resume the same workstation sessions from several accounts |
+| History mode | Credentials | SQLite resume index | Rollout tree | Recommended use |
+|---|---|---|---|---|
+| `private` | Profile-local | Profile-local | Profile-local | Confidential lab/company separation |
+| `shared` | Profile-local | Shared base index | Shared base tree | Resume the same workstation sessions from several accounts |
 
 ```bash
 agent-profile history personal shared
@@ -164,7 +164,7 @@ agent-profile history company private
 agentshell status personal
 ```
 
-Codex documents `CODEX_HOME` as its state root and `CODEX_SQLITE_HOME` as the location for SQLite-backed state. AgentShell uses that supported boundary; it never shares credentials merely to share a resume catalog.
+Codex documents `CODEX_HOME` as its state root and `CODEX_SQLITE_HOME` as the location for SQLite-backed state. AgentShell keeps account authentication under the profile while a generated shared-history view links only the history-bearing paths to the common Codex tree. This matters for current Codex releases because paginated sessions locate source rollouts through `CODEX_HOME/sessions`, not through SQLite alone.
 
 ## Account management
 
@@ -236,6 +236,8 @@ Provider details and limitations are documented in [docs/providers.md](docs/prov
 ~/.local/bin/agent-*                     commands
 ~/scripts/sourced_agent_shell.sh         Bash integration
 ~/.local/share/agentshell/profiles/      private profile state
+  ACCOUNT/codex-home/                    private-mode and legacy account state
+  ACCOUNT/codex-shared-home/             shared-mode account/history view
 ```
 
 On Windows, the default current-user layout is:

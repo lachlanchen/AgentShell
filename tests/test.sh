@@ -12,6 +12,9 @@ export AGENT_SHELL_BIN_DIR="$test_root/bin"
 export AGENT_SHELL_CODEX_WRAPPER="$test_root/missing-wrapper"
 export AGENT_SHELL_USE_CODEX_WRAPPER=0
 export AGENT_TEST_OUTPUT="$test_root/invocation.txt"
+unset AGENT_SHELL_ACCOUNT AGENT_SHELL_PROFILE_ROOT AGENT_SHELL_PROFILE_ENV \
+  AGENT_SHELL_CODEX_HISTORY_MODE AGENT_SHELL_CODEX_SQLITE_HOME \
+  AGENT_SHELL_CODEX_HOME CODEX_HOME CODEX_SQLITE_HOME || true
 mkdir -p "$HOME/.codex/skills" "$AGENT_SHELL_BIN_DIR" "$test_root/native" "$test_root/work/tree"
 
 cat > "$HOME/.codex/config.toml" <<'EOF'
@@ -67,6 +70,13 @@ grep -q "^sqlite_home=$profile/codex-home$" "$AGENT_TEST_OUTPUT"
 agent-profile history alpha shared >/dev/null
 agent-alpha-codex --version >/dev/null
 grep -q "^sqlite_home=$HOME/.codex$" "$AGENT_TEST_OUTPUT"
+grep -q "^codex_home=$profile/codex-shared-home$" "$AGENT_TEST_OUTPUT"
+test -L "$profile/codex-shared-home/sessions"
+test "$(realpath "$profile/codex-shared-home/sessions")" = "$(realpath "$HOME/.codex/sessions")"
+test ! -e "$profile/codex-shared-home/auth.json"
+test -f "$profile/codex-shared-home/.account-state-v1"
+test -f "$profile/codex-shared-home/config.toml"
+test ! -L "$profile/codex-shared-home/config.toml"
 grep -q '^History mode:   shared$' <<<"$(agentshell status alpha)"
 grep -q '^AgentShell 0.3.0$' <<<"$(agentshell --version)"
 
@@ -109,6 +119,18 @@ if agent-codex --account= --version >/dev/null 2>&1; then
   printf 'empty account value was unexpectedly accepted\n' >&2
   exit 1
 fi
+
+# Legacy rollout paths receive an account-isolated view over their original
+# history tree. The selected account's credentials are never replaced by the
+# source profile's credentials.
+mkdir -p "$AGENT_SHELL_HOME/profiles/beta/codex-home/sessions/2026/08/30"
+legacy_rollout="$AGENT_SHELL_HOME/profiles/beta/codex-home/sessions/2026/08/30/rollout-test.jsonl"
+printf '{}\n' > "$legacy_rollout"
+printf 'alpha auth\n' > "$profile/codex-shared-home/auth.json"
+legacy_view="$(agent-profile codex-home alpha "$legacy_rollout")"
+test "$legacy_view" = "$profile/codex-history-views/beta"
+test "$(realpath "$legacy_view/sessions")" = "$(realpath "$AGENT_SHELL_HOME/profiles/beta/codex-home/sessions")"
+test "$(readlink "$legacy_view/auth.json")" = "$profile/codex-shared-home/auth.json"
 
 profile_list_output="$(agent-profile list)"
 profile_show_output="$(agent-profile show alpha)"

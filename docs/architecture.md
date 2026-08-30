@@ -6,7 +6,7 @@ AgentShell does not change the OS user, `HOME`, or `USERPROFILE`, and does not c
 
 | Provider | Isolated variable | Profile location |
 |---|---|---|
-| Codex | `CODEX_HOME`, `CODEX_SQLITE_HOME` | `codex-home/` plus selected SQLite root |
+| Codex | `CODEX_HOME`, `CODEX_SQLITE_HOME` | account state plus a private/shared history view |
 | Claude Code | `CLAUDE_CONFIG_DIR` | `claude-home/` |
 | Gemini CLI | `GEMINI_CLI_HOME` | `gemini-home/` |
 | Copilot CLI | `COPILOT_HOME`, `COPILOT_CACHE_HOME` | `copilot-home/`, `cache/copilot/` |
@@ -15,17 +15,20 @@ By default this gives each profile separate credentials, sessions, history, and 
 
 Codex has a deliberate split:
 
-- `CODEX_HOME` always remains profile-local, so login credentials, logs, config, and newly written rollout files belong to that account profile.
-- `CODEX_SQLITE_HOME` follows the profile's `private` or `shared` history mode.
+- `codex-home/` is the private-mode account state and the migration source for profiles created by older AgentShell versions.
+- In `private` mode, `CODEX_HOME` and `CODEX_SQLITE_HOME` both use that profile-local tree.
+- In `shared` mode, `CODEX_SQLITE_HOME` uses the shared base index and `CODEX_HOME` uses a generated `codex-shared-home/` view. It owns a regular, profile-private `auth.json` so login/logout remains correct, while `sessions`, `archived_sessions`, `session_index.jsonl`, shell snapshots, attachments, generated images, and writer locks resolve to one coherent shared history tree.
 
-The official Codex environment-variable reference defines `CODEX_SQLITE_HOME` separately for SQLite-backed state. AgentShell uses that public boundary rather than linking authentication files.
+Sharing only SQLite is insufficient for current paginated Codex histories. A resumed rollout can contain an immutable `history_base` reference, and Codex resolves that source ID by scanning `CODEX_HOME/sessions`. If the index and rollout tree point at different roots, the picker can find a thread but resume fails with `invalid paginated history lineage ... missing source rollout`.
 
 ```bash
 agent-profile history lab private
 agent-profile history personal shared
 ```
 
-Shared history allows accounts to discover and resume the same indexed sessions. It also means a lab or company profile can see local titles/previews from that shared index, so private mode is the safer default.
+Shared history allows accounts to discover and resume the same indexed sessions. It also means a lab or company profile can see local titles/previews and rollout paths from that shared history, so private mode is the safer default.
+
+Older AgentShell versions wrote a small number of rollouts into profile-local trees even when SQLite was shared. AgentShell 0.3 resolves a credential-isolated history view over the selected legacy tree instead of moving or rewriting those rollouts. New shared-mode sessions use the common tree. Cross-tree lineage should be recovered only after confirming that every source rollout is inactive; AgentShell never rewrites rollout JSONL or live SQLite state.
 
 The default data roots are platform-specific but contain the same profile layout:
 
@@ -43,7 +46,7 @@ On first creation, AgentShell may inherit authored configuration from the user's
 - Codex on both platforms: a private copy of `config.toml`, excluding `sqlite_home`, plus links to authored `AGENTS.md`, skills, plugins, and rules when the host supports them. Windows uses hard links for files and junctions for directories.
 - Claude, Gemini, and Copilot on Bash: links only to known settings/customization paths when present. Windows prepares isolated provider directories without copying ordinary provider credentials or settings.
 
-It never seeds known credential or session files such as Codex `auth.json`, Gemini OAuth files, Copilot `config.json`, or provider histories. Shared Codex history is an explicit runtime SQLite selection, not a copied credential.
+It never seeds a new profile from the default Codex `auth.json`, Gemini OAuth files, or Copilot `config.json`. When an existing Codex profile first enters shared mode, AgentShell materializes that same profile's credential once into its private shared view; it never copies credentials from one named account into another. History paths are then linked separately to the selected common or legacy rollout tree.
 
 Where the host supports the required links, customization folders are shared by design. This avoids duplicating tool installations and personal skills, but a change to a shared skill is visible to every profile. Profiles are not a security boundary because they all run as the same OS user.
 
