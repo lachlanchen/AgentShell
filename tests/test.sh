@@ -57,6 +57,23 @@ grep -q 'model = "test-model"' "$profile/codex-home/config.toml"
 ! grep -q 'sqlite_home' "$profile/codex-home/config.toml"
 test -L "$AGENT_SHELL_BIN_DIR/agent-alpha-codex"
 
+# Locate saved history without creating profiles or changing the active route.
+mkdir -p "$HOME/.codex/sessions/2026/09/05" "$HOME/.codex/archived_sessions"
+printf '{}\n' > "$HOME/.codex/sessions/2026/09/05/rollout-old.jsonl"
+printf '{}\n' > "$HOME/.codex/archived_sessions/rollout-archived.jsonl"
+sessions_output="$(agent-profile sessions alpha)"
+grep -q 'Base Codex history:' <<<"$sessions_output"
+grep -q 'sessions: 1 rollout files' <<<"$sessions_output"
+grep -q 'archived_sessions: 1 rollout files' <<<"$sessions_output"
+grep -q 'Private history (alpha):' <<<"$sessions_output"
+grep -q 'agent-codex --account alpha resume --all' <<<"$sessions_output"
+test "$(agent-profile history alpha)" = private
+test ! -d "$profile/codex-shared-home"
+if agent-profile sessions missing >/dev/null 2>&1; then
+  exit 1
+fi
+test ! -d "$AGENT_SHELL_HOME/profiles/missing"
+
 cd "$test_root/work/tree"
 agent-alpha-codex --model test-model 'hello world' >/dev/null
 grep -q "^cwd=$test_root/work/tree$" "$AGENT_TEST_OUTPUT"
@@ -131,6 +148,16 @@ legacy_view="$(agent-profile codex-home alpha "$legacy_rollout")"
 test "$legacy_view" = "$profile/codex-history-views/beta"
 test "$(realpath "$legacy_view/sessions")" = "$(realpath "$AGENT_SHELL_HOME/profiles/beta/codex-home/sessions")"
 test "$(readlink "$legacy_view/auth.json")" = "$profile/codex-shared-home/auth.json"
+
+# A new account retains its own login when opting into the old base history.
+printf 'beta auth\n' > "$AGENT_SHELL_HOME/profiles/beta/codex-home/auth.json"
+agent-profile history beta shared >/dev/null
+test "$(cat "$AGENT_SHELL_HOME/profiles/beta/codex-shared-home/auth.json")" = 'beta auth'
+test -f "$legacy_rollout"
+test -f "$AGENT_SHELL_HOME/profiles/beta/codex-shared-home/sessions/2026/09/05/rollout-old.jsonl"
+sessions_output="$(agent-profile sessions beta)"
+grep -q 'Private history (beta):' <<<"$sessions_output"
+grep -q 'configured history: shared' <<<"$sessions_output"
 
 profile_list_output="$(agent-profile list)"
 profile_show_output="$(agent-profile show alpha)"

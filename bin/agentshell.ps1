@@ -56,6 +56,7 @@ Usage:
   agent-run --account ACCOUNT TOOL [ARG...]
   agent-profile create|list|show|status|login|aliases ACCOUNT [TOOL]
   agent-profile history ACCOUNT [private|shared]
+  agent-profile sessions [ACCOUNT]
   agent-profile codex-home ACCOUNT [ROLLOUT_PATH]
 
 Codex shortcuts after PowerShell integration is loaded:
@@ -546,6 +547,9 @@ function Invoke-AgentShellTool {
         $profile = Set-AgentShellProfileEnvironment $Name
         if ($env:AGENT_SHELL_QUIET -ne '1' -and -not [Console]::IsErrorRedirected) {
             [Console]::Error.WriteLine("AgentShell [$Name] - $Tool - history=$($profile.HistoryMode) - cwd=$((Get-Location).Path)")
+            if ($Tool -in @('codex', 'codexr') -and $profile.HistoryMode -eq 'private') {
+                [Console]::Error.WriteLine("Private history hides earlier base/account sessions. Locate them: agent-profile sessions $Name")
+            }
         }
 
         $command = $null
@@ -621,6 +625,57 @@ function Show-AgentShellProfile {
         "Working dir:   $((Get-Location).Path) (unchanged)",
         "Private env:   $(Join-Path $root 'env.ps1')"
     ) | Write-Output
+    Show-AgentShellHistoryHint $Name
+}
+
+function Show-AgentShellHistoryHint {
+    param([string]$Name)
+    if ((Get-AgentShellHistoryMode $Name) -eq 'private') {
+        "Private history hides earlier base/account sessions. Locate them: agent-profile sessions $Name"
+    }
+}
+
+function Show-AgentShellSessionStore {
+    param([string]$Label, [string]$Root)
+    "${Label}: $Root"
+    foreach ($item in @('sessions', 'archived_sessions')) {
+        $path = Join-Path $Root $item
+        $count = 0
+        if (Test-Path -LiteralPath $path -PathType Container) {
+            $count = @(Get-ChildItem -LiteralPath $path -Recurse -File -Force -Filter '*.jsonl' -ErrorAction Stop).Count
+        }
+        "  ${item}: $count rollout files"
+    }
+}
+
+function Show-AgentShellSessions {
+    param([string]$Name)
+    if ([string]::IsNullOrWhiteSpace($Name)) { $Name = $env:AGENT_SHELL_ACCOUNT }
+    if (-not [string]::IsNullOrWhiteSpace($Name)) {
+        [void](Test-AgentShellProfileName $Name)
+        if (-not (Test-Path -LiteralPath (Join-Path (Get-AgentShellProfileRoot $Name) 'profile.conf') -PathType Leaf)) {
+            Throw-AgentShellError "unknown account: $Name"
+        }
+        "Account: $Name; configured history: $(Get-AgentShellHistoryMode $Name)"
+    }
+    $base = Get-AgentShellBaseCodexHome
+    $shared = Get-AgentShellSharedCodexHome
+    Show-AgentShellSessionStore 'Base Codex history' $base
+    if (-not [string]::Equals([IO.Path]::GetFullPath($base), [IO.Path]::GetFullPath($shared), [StringComparison]::OrdinalIgnoreCase)) {
+        Show-AgentShellSessionStore 'Configured shared history' $shared
+    }
+    if (Test-Path -LiteralPath $script:AgentShellProfilesDirectory -PathType Container) {
+        foreach ($root in @(Get-ChildItem -LiteralPath $script:AgentShellProfilesDirectory -Directory -Force | Sort-Object Name)) {
+            if (Test-Path -LiteralPath (Join-Path $root.FullName 'profile.conf') -PathType Leaf) {
+                Show-AgentShellSessionStore "Private history ($($root.Name))" (Join-Path $root.FullName 'codex-home')
+            }
+        }
+    }
+    'Counts are saved rollout files (including agent threads), not picker entries. No histories were changed.'
+    if (-not [string]::IsNullOrWhiteSpace($Name)) {
+        "To use shared history with this account login: agent-profile history $Name shared"
+        "Then launch: agent-codex --account $Name resume --all"
+    }
 }
 
 function Show-AgentShellProfileList {
@@ -648,6 +703,8 @@ function Set-AgentShellHistoryMode {
     "AgentShell account $Name now uses $Mode Codex history."
     "SQLite home: $sqliteHome"
     "Codex home: $codexHome"
+    "Existing sessions stay in their original store. Locate them: agent-profile sessions $Name"
+    "Already-running shells and Codex sessions keep their environment. Relaunch: agent-codex --account $Name resume --all"
 }
 
 function Show-AgentShellStatus {
@@ -668,6 +725,7 @@ function Show-AgentShellStatus {
     "Codex home:     $codexHome"
     "SQLite home:    $(Get-AgentShellSqliteHome $Name)"
     "Working dir:    $((Get-Location).Path)"
+    Show-AgentShellHistoryHint $Name
 }
 
 function Invoke-AgentShellProfileCommand {
@@ -678,6 +736,7 @@ function Invoke-AgentShellProfileCommand {
     switch ($action) {
         { $_ -in @('-h', '--help', 'help', '') } { Show-AgentShellUsage; return }
         { $_ -in @('list', 'ls') } { Show-AgentShellProfileList; return }
+        'sessions' { Show-AgentShellSessions $name; return }
         'create' { if ([string]::IsNullOrWhiteSpace($name)) { Throw-AgentShellError 'profile create requires ACCOUNT' }; Show-AgentShellProfile $name; return }
         'show' { if ([string]::IsNullOrWhiteSpace($name)) { Throw-AgentShellError 'profile show requires ACCOUNT' }; Show-AgentShellProfile $name; return }
         'history' { if ([string]::IsNullOrWhiteSpace($name)) { Throw-AgentShellError 'profile history requires ACCOUNT' }; Set-AgentShellHistoryMode $name $third; return }

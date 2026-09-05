@@ -166,6 +166,25 @@ agentshell status personal
 
 Codex documents `CODEX_HOME` as its state root and `CODEX_SQLITE_HOME` as the location for SQLite-backed state. AgentShell keeps account authentication under the profile while a generated shared-history view links only the history-bearing paths to the common Codex tree. This matters for current Codex releases because paginated sessions locate source rollouts through `CODEX_HOME/sessions`, not through SQLite alone.
 
+### Sessions missing after switching accounts?
+
+New accounts default to private history, so their picker does not show sessions from your ordinary Codex home. To locate saved sessions, run:
+
+```bash
+agent-profile sessions company
+```
+
+This read-only report lists the base, configured shared, and private account stores with rollout file counts, including archived files. Counts include agent threads and may differ from the picker. It does not read credentials or conversation contents. Run it separately in WSL and Windows to inspect each installation's stores.
+
+To continue your existing workstation sessions using the company account's login:
+
+```bash
+agent-profile history company shared
+agent-codex --account company resume --all
+```
+
+The selected account keeps its credentials; history is shared with other profiles that opt into the same store. Existing private sessions stay in their original directory and can be reached by switching back to `private`. Running Codex processes keep their current history route; launch a new account command after changing modes. Avoid manually setting `CODEX_HOME` to the base home when you want to retain the company login, because that also selects the base account's credentials.
+
 ## Account management
 
 ```bash

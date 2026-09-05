@@ -27,6 +27,7 @@ Usage:
   agent-run --account ACCOUNT TOOL [ARG...]
   agent-profile create|list|show|status|login|aliases ACCOUNT [TOOL]
   agent-profile history ACCOUNT [private|shared]
+  agent-profile sessions [ACCOUNT]
   agent-profile codex-home ACCOUNT [ROLLOUT_PATH]
 
 Codex shortcuts:
@@ -418,6 +419,9 @@ agent_shell_run_tool() {
   if [ "${AGENT_SHELL_QUIET:-0}" != "1" ] && [ -t 2 ]; then
     printf 'AgentShell [%s] • %s • history=%s • cwd=%s\n' \
       "$name" "$tool" "$AGENT_SHELL_CODEX_HISTORY_MODE" "$(pwd -P)" >&2
+    case "$tool" in
+      codex|codexr) agent_shell_history_hint "$name" >&2 ;;
+    esac
   fi
 
   wrapper="${AGENT_SHELL_CODEX_WRAPPER:-$HOME/scripts/codex_wrapper.sh}"
@@ -531,6 +535,50 @@ Copilot home:  $root/copilot-home
 Working dir:   $(pwd -P) (unchanged)
 Private env:   $root/env.sh
 EOF
+  agent_shell_history_hint "$name"
+}
+
+agent_shell_history_hint() {
+  local name="$1"
+  if [ "$(agent_shell_history_mode "$name")" = private ]; then
+    printf 'Private history hides earlier base/account sessions. Locate them: agent-profile sessions %s\n' "$name"
+  fi
+}
+
+agent_shell_session_store() {
+  local label="$1" root="$2" item count
+  printf '%s: %s\n' "$label" "$root"
+  for item in sessions archived_sessions; do
+    count=0
+    if [ -d "$root/$item" ]; then
+      count="$(find -H "$root/$item" -type f -name '*.jsonl' -printf '.\n' | wc -l)"
+    fi
+    printf '  %s: %s rollout files\n' "$item" "$count"
+  done
+}
+
+agent_shell_locate_sessions() {
+  local name="${1:-${AGENT_SHELL_ACCOUNT:-}}" base shared root
+  if [ -n "$name" ]; then
+    agent_shell_validate_name "$name"
+    [ -f "$(agent_shell_profile_root "$name")/profile.conf" ] || agent_shell_die "unknown account: $name"
+    printf 'Account: %s; configured history: %s\n' "$name" "$(agent_shell_history_mode "$name")"
+  fi
+  base="${AGENT_SHELL_BASE_CODEX_HOME:-$HOME/.codex}"
+  shared="$(agent_shell_shared_codex_home)"
+  agent_shell_session_store 'Base Codex history' "$base"
+  if [ "$(realpath -m -- "$base")" != "$(realpath -m -- "$shared")" ]; then
+    agent_shell_session_store 'Configured shared history' "$shared"
+  fi
+  for root in "$agent_shell_profiles_dir"/*; do
+    [ -f "$root/profile.conf" ] || continue
+    agent_shell_session_store "Private history ($(basename -- "$root"))" "$root/codex-home"
+  done
+  printf 'Counts are saved rollout files (including agent threads), not picker entries. No histories were changed.\n'
+  if [ -n "$name" ]; then
+    printf 'To use shared history with this account login: agent-profile history %s shared\n' "$name"
+    printf 'Then launch: agent-codex --account %s resume --all\n' "$name"
+  fi
 }
 
 agent_shell_set_history() {
@@ -551,6 +599,8 @@ agent_shell_set_history() {
   printf 'AgentShell account %s now uses %s Codex history.\n' "$name" "$mode"
   printf 'SQLite home: %s\n' "$sqlite_home"
   printf 'Codex home: %s\n' "$codex_home"
+  printf 'Existing sessions stay in their original store. Locate them: agent-profile sessions %s\n' "$name"
+  printf 'Already-running shells and Codex sessions keep their environment. Relaunch: agent-codex --account %s resume --all\n' "$name"
 }
 
 agent_shell_runtime_status() {
@@ -577,6 +627,7 @@ agent_shell_runtime_status() {
   printf 'Codex home:     %s\n' "$codex_home"
   printf 'SQLite home:    %s\n' "$sqlite_home"
   printf 'Working dir:    %s\n' "$(pwd -P)"
+  agent_shell_history_hint "$account"
 }
 
 agent_shell_show_aliases() {
@@ -626,6 +677,7 @@ agent_shell_profile_main() {
       agent_shell_show_profile "$name"
       ;;
     list|ls) agent_shell_list_profiles ;;
+    sessions) agent_shell_locate_sessions "$name" ;;
     show)
       [ -n "$name" ] || agent_shell_die 'profile show requires ACCOUNT'
       agent_shell_show_profile "$name"

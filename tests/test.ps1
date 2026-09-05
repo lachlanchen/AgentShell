@@ -541,6 +541,16 @@ exit `$LASTEXITCODE
 
     # Shared history keeps authentication profile-local while making the
     # SQLite index and source-rollout tree coherent.
+    $savedSessions = Join-Path $baseCodexHome 'sessions\2026\09\05'
+    New-Item -ItemType Directory -Force -Path $savedSessions | Out-Null
+    [IO.File]::WriteAllText((Join-Path $savedSessions 'rollout-old.jsonl'), '{}')
+    $sessionsReport = (Invoke-AgentCommand $agentProfileCommand @('sessions', 'personal')) -join "`n"
+    Assert-True ($sessionsReport.Contains('sessions: 1 rollout files')) 'session locator must find base rollouts'
+    Assert-True ($sessionsReport.Contains('Private history (personal):')) 'session locator must show private history'
+    Assert-True ($sessionsReport.Contains('Configured shared history:')) 'session locator must show custom shared store'
+    Assert-True ($sessionsReport.Contains('agent-codex --account personal resume --all')) 'session locator must keep selected account in resume guidance'
+    Assert-False (Test-Path -LiteralPath (Join-Path $personalRoot 'codex-shared-home')) 'session locator must not create history views'
+    Assert-True ((Invoke-AgentCommand $agentProfileCommand @('history', 'personal')) -contains 'private') 'session locator must not change mode'
     Invoke-AgentCommand $agentProfileCommand @('history', 'personal', 'shared') | Out-Null
     $invocation = Invoke-AndReadNative { codex '--account' 'personal' '--version' }
     $sharedCodexView = Join-Path $personalRoot 'codex-shared-home'
