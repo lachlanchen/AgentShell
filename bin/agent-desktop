@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+"""Open official Linux Codex/ChatGPT desktops using named AgentShell accounts."""
+import argparse
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import socket
+import subprocess
+import sys
+import time
+
+
+def valid_account(value):
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", value or ""):
+        raise argparse.ArgumentTypeError("account must be 1-64 letters, numbers, dots, underscores, or hyphens")
+    return value
+
+
+def profile_root(account):
+    data = os.environ.get("AGENT_SHELL_HOME")
+    if not data:
+        data = str(Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))) / "agentshell")
+    return Path(data).expanduser().resolve() / "profiles" / valid_account(account)
+
+
+def desktop_quote(value):
+    # Desktop Entry Exec quoting is not shell quoting. Percent signs are field codes.
+    value = str(value).replace("%", "%%")
+    for char in ("\\", '"', "`", "$"):
+        value = value.replace(char, "\\" + char)
+    return '"' + value + '"'
+
+
+def install_launchers(accounts):
+    directory = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))) / "applications"
+    directory.mkdir(parents=True, exist_ok=True)
+    launcher = Path(__file__).resolve()
+    for account in accounts:
+        account = valid_account(account)
+        path = directory / f"agentshell-codex-{account}.desktop"
+        if path.exists() and "X-AgentShell-Desktop=true" not in path.read_text():
+            raise RuntimeError(f"refusing to replace an unrelated launcher: {path}")
+        title = account[:1].upper() + account[1:]
+        content = (
+            "[Desktop Entry]\nType=Application\n"
+            f"Name=Codex — {title}\n"
+            f"Comment=ChatGPT and Codex using the {account} AgentShell account\n"
+            f"Exec={desktop_quote(launcher)} --account {account}\n"
+            "Icon=chatgpt\nTerminal=false\nStartupNotify=true\n"
+            f"StartupWMClass=AgentShellCodex-{account}\n"
+            "Categories=Development;\n"
+            f"Keywords=Codex;ChatGPT;AgentShell;AI;{account};\n"
+            "X-AgentShell-Desktop=true\n"
+        )
+        path.write_text(content)
+        path.chmod(0o644)
+        print(path)
+    tool = shutil.which("update-desktop-database")
+    if tool:
+        subprocess.run([tool, str(directory)], check=True)
+
+
+def running_pid(data):
+    try:
+        host, pid = os.readlink(data / "SingletonLock").rsplit("-", 1)
+        if host != socket.gethostname():
+            return None
+        pid = int(pid)
+        os.kill(pid, 0)
+        return pid
+    except (OSError, ValueError):
+        return None
+
+
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    extra = []
+    if "--" in argv:
+        separator = argv.index("--")
+        argv, extra = argv[:separator], argv[separator + 1:]
+    parser = argparse.ArgumentParser(
+        description="Separate official Linux Codex desktops using your AgentShell logins.",
+        epilog="Examples: agent-desktop company; codex-desktop --account personal; "
+               "agentshell lab -- agent-desktop. Extra app arguments go after --.",
+    )
+    parser.add_argument("account", nargs="?", type=valid_account)
+    parser.add_argument("--account", dest="named_account", type=valid_account)
+    parser.add_argument("--install-launchers", nargs="+", type=valid_account, metavar="ACCOUNT")
+    parser.add_argument("--foreground", action="store_true", help="keep the app attached to this terminal")
+    parser.add_argument("--status", action="store_true", help="show paths and existing desktop PID without launching")
+    args = parser.parse_args(argv)
+    if sys.platform != "linux":
+        parser.error("this optional desktop launcher currently supports the official Linux package")
+    if args.install_launchers:
+        if args.account or args.named_account or extra or args.foreground or args.status:
+            parser.error("--install-launchers cannot be combined with app launch options")
+        install_launchers(args.install_launchers)
+        return 0
+    if args.account and args.named_account and args.account != args.named_account:
+        parser.error("two different accounts were supplied")
+    account = args.named_account or args.account or os.environ.get("AGENT_SHELL_ACCOUNT")
+    if not account:
+        parser.error("choose an account: agent-desktop company (or personal / lab)")
+    account = valid_account(account)
+    root = profile_root(account)
+    data = root / "codex-desktop"
+    if args.status:
+        print(json.dumps({"account": account, "profile": str(root), "desktop_data": str(data),
+                          "running_pid": running_pid(data)}, indent=2))
+        return 0
+    for argument in extra:
+        if argument.split("=", 1)[0] in ("--user-data-dir", "--class"):
+            parser.error("AgentShell owns --user-data-dir and --class to preserve account isolation")
+    runtime = Path(__file__).resolve().with_name("agentshell")
+    if not runtime.is_file():
+        raise RuntimeError("AgentShell runtime missing beside agent-desktop; rerun install.sh")
+    app = os.environ.get("AGENT_SHELL_DESKTOP_APP") or shutil.which("chatgpt")
+    if not app:
+        raise RuntimeError("install the official ChatGPT Linux package first; see docs/desktop-linux.md")
+    os.umask(0o077)
+    # Let AgentShell own all profile creation, credential routing, and shared-history logic.
+    env = os.environ.copy()
+    env["AGENT_SHELL_QUIET"] = "1"
+    subprocess.run([str(runtime), "profile", "create", account], env=env,
+                   stdout=subprocess.DEVNULL, check=True)
+    data.mkdir(parents=True, exist_ok=True, mode=0o700)
+    command = [str(runtime), "run", "--account", account, "env",
+               "CODEX_ELECTRON_USER_DATA_PATH=" + str(data), str(app),
+               "--user-data-dir=" + str(data), "--class=AgentShellCodex-" + account, *extra]
+    if args.foreground:
+        os.execvpe(command[0], command, env)
+    log_path = root / "codex-desktop-launch.log"
+    if log_path.exists() and log_path.stat().st_size > 10 * 1024 * 1024:
+        log_path.replace(log_path.with_suffix(".log.previous"))
+    with log_path.open("ab") as log:
+        log_path.chmod(0o600)
+        process = subprocess.Popen(command, env=env, stdin=subprocess.DEVNULL, stdout=log,
+                                   stderr=subprocess.STDOUT, start_new_session=True)
+    time.sleep(0.4)
+    status = process.poll()
+    if status not in (None, 0):
+        raise RuntimeError(f"desktop exited with status {status}; inspect {log_path}")
+    print(f"Opened Codex ({account}). Reopening this account reuses its existing desktop process.")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (OSError, RuntimeError, subprocess.CalledProcessError, argparse.ArgumentTypeError) as error:
+        print(f"AgentShell desktop: {error}", file=sys.stderr)
+        raise SystemExit(1)

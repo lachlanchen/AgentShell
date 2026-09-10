@@ -1,5 +1,7 @@
 # AgentShell complete tutorial
 
+For the official Linux graphical app, see [Codex desktops with separate accounts](desktop-linux.md). After installing the app, `agent-desktop company`, `agent-desktop personal`, and `agent-desktop lab` open independent windows using your existing AgentShell logins.
+
 AgentShell lets several terminal windows use different AI-service logins while they all work in the same real project directory. It changes each tool's state directory; it does not copy the project, change the OS user, or create a container. The commands in this guide work in Bash and Windows PowerShell 5.1 unless an OS-specific block is shown.
 
 This guide uses three example profiles:

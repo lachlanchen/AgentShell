@@ -12,6 +12,7 @@ commands=(agentshell agent-run agent-profile agent-codex agent-codexr agent-code
 
 install -d -m 0755 "$install_root" "$bin_dir" "$(dirname -- "$shell_helper")"
 install -m 0755 "$repo_root/bin/agentshell" "$install_root/agentshell"
+install -m 0755 "$repo_root/bin/agent-desktop" "$install_root/agent-desktop"
 install -m 0644 "$repo_root/shell/agentshell.bash" "$shell_helper"
 
 for command_name in "${commands[@]}"; do
@@ -26,6 +27,20 @@ for command_name in "${commands[@]}"; do
     exit 1
   fi
   ln -sfn "$install_root/agentshell" "$link"
+done
+
+for command_name in agent-desktop codex-desktop; do
+  link="$bin_dir/$command_name"
+  if [ -L "$link" ]; then
+    if [ "$(readlink -f -- "$link" 2>/dev/null || true)" != "$(readlink -f -- "$install_root/agent-desktop")" ]; then
+      printf 'Refusing to replace unrelated symlink: %s\n' "$link" >&2
+      exit 1
+    fi
+  elif [ -e "$link" ]; then
+    printf 'Refusing to replace existing path: %s\n' "$link" >&2
+    exit 1
+  fi
+  ln -sfn "$install_root/agent-desktop" "$link"
 done
 
 marker_begin='# >>> AgentShell >>>'

@@ -26,6 +26,19 @@ AgentShell permite que las terminales personal, de laboratorio y de empresa usen
 - Continúan disponibles `codexr`, `/rename`, la búsqueda parcial de rutas y `codexmv`.
 - Codex está plenamente integrado; Claude Code, Gemini CLI y Copilot CLI disponen de adaptadores de estado.
 
+## Cuentas de escritorio en Linux
+
+La versión preliminar oficial de ChatGPT para Linux incluye Codex. Instálala y usa estos lanzadores para reutilizar tus inicios de sesión de AgentShell en ventanas independientes. Abrir de nuevo una cuenta reutiliza su aplicación existente.
+
+```bash
+agent-desktop --install-launchers company personal lab
+agent-desktop company
+agent-desktop personal
+agent-desktop lab
+```
+
+[Instalación, inicio de sesión, actualizaciones con APT y aislamiento](../docs/desktop-linux.md).
+
 ## Inicio rápido
 
 ```bash

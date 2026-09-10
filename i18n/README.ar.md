@@ -28,6 +28,19 @@
 - تبقى مسارات `codexr` و`/rename` والبحث الجزئي و`codexmv` متاحة.
 - تكامل Codex كامل، مع محولات حالة لـ Claude Code وGemini CLI وCopilot CLI.
 
+## حسابات تطبيق سطح المكتب على Linux
+
+تتضمن النسخة التجريبية الرسمية من ChatGPT على Linux أداة Codex. بعد تثبيتها، استخدم أوامر التشغيل التالية لإعادة استخدام حسابات AgentShell في نوافذ مستقلة. فتح الحساب مرة أخرى يعيد استخدام التطبيق الجاري.
+
+```bash
+agent-desktop --install-launchers company personal lab
+agent-desktop company
+agent-desktop personal
+agent-desktop lab
+```
+
+[تفاصيل التثبيت وتسجيل الدخول وتحديثات APT وفصل الحسابات](../docs/desktop-linux.md).
+
 ## بدء سريع
 
 ```bash

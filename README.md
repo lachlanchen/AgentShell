@@ -49,6 +49,19 @@ Inside `agentshell personal`, plain `codex`, `codexr`, and `codexmv` all use tha
 | --- | --- | --- |
 | [![Donate](https://img.shields.io/badge/Donate-LazyingArt-0EA5E9?style=for-the-badge&logo=kofi&logoColor=white)](https://chat.lazying.art/donate) | [![PayPal](https://img.shields.io/badge/PayPal-RongzhouChen-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/RongzhouChen) | [![Stripe](https://img.shields.io/badge/Stripe-Donate-635BFF?style=for-the-badge&logo=stripe&logoColor=white)](https://buy.stripe.com/aFadR8gIaflgfQV6T4fw400) |
 
+## Linux desktop accounts
+
+The official ChatGPT Linux preview includes Codex. Install it, then use these launchers to reuse your AgentShell logins in separate desktop windows. Reopening an account reuses its existing app.
+
+```bash
+agent-desktop --install-launchers company personal lab
+agent-desktop company
+agent-desktop personal
+agent-desktop lab
+```
+
+[Installation, login, APT updates, and isolation details](docs/desktop-linux.md).
+
 ## One folder, several identities
 
 ```text

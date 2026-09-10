@@ -26,6 +26,19 @@ AgentShell позволяет личному, лабораторному и ко
 - Сохраняются процессы `codexr`, `/rename`, частичного поиска пути и `codexmv`.
 - Codex полностью интегрирован; для Claude Code, Gemini CLI и Copilot CLI предусмотрены адаптеры состояния.
 
+## Учётные записи настольного приложения в Linux
+
+Официальная предварительная версия ChatGPT для Linux включает Codex. После установки используйте эти команды, чтобы открывать отдельные окна с существующими учётными записями AgentShell. Повторное открытие той же учётной записи использует уже запущенное приложение.
+
+```bash
+agent-desktop --install-launchers company personal lab
+agent-desktop company
+agent-desktop personal
+agent-desktop lab
+```
+
+[Установка, вход, обновления через APT и разделение учётных записей](../docs/desktop-linux.md).
+
 ## Быстрый старт
 
 ```bash

@@ -26,6 +26,19 @@ AgentShell 讓個人、實驗室與公司終端分別使用獨立的 Codex 登�
 - 保留工作站的 `codexr`、`/rename`、路徑搜尋與 `codexmv` 流程。
 - Codex 已完整整合，並為 Claude Code、Gemini CLI 與 Copilot CLI 提供狀態介接。
 
+## Linux 桌面多帳戶
+
+Linux 版官方 ChatGPT 預覽版包含 Codex。安裝後，使用以下啟動指令沿用 AgentShell 的登入，在獨立視窗中使用不同帳戶。再次開啟同一帳戶會沿用正在執行的應用程式。
+
+```bash
+agent-desktop --install-launchers company personal lab
+agent-desktop company
+agent-desktop personal
+agent-desktop lab
+```
+
+[安裝、登入、APT 更新與帳戶隔離說明](../docs/desktop-linux.md).
+
 ## 快速開始
 
 ```bash

@@ -12,3 +12,5 @@ env.sh
 # Local test/build output.
 .tmp/
 tmp/
+__pycache__/
+*.pyc

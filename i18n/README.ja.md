@@ -26,6 +26,19 @@ AgentShell を使うと、プロジェクトを複製したり Unix ユーザー
 - `codexr`、`/rename`、部分パス検索、`codexmv` の既存ワークフローを維持します。
 - Codex を完全統合し、Claude Code、Gemini CLI、Copilot CLI にも状態アダプターを提供します。
 
+## Linux デスクトップのアカウント
+
+Linux 向け公式 ChatGPT プレビューには Codex が含まれます。インストール後、次のランチャーで AgentShell のログインを利用し、アカウントごとに別のウィンドウを開けます。同じアカウントを再度開くと、起動中のアプリが再利用されます。
+
+```bash
+agent-desktop --install-launchers company personal lab
+agent-desktop company
+agent-desktop personal
+agent-desktop lab
+```
+
+[インストール、ログイン、APT 更新、アカウント分離の詳細](../docs/desktop-linux.md).
+
 ## クイックスタート
 
 ```bash
