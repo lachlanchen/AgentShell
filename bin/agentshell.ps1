@@ -414,9 +414,9 @@ function Initialize-AgentShellProfile {
     $envFile = Join-Path $root 'env.ps1'
     if ($created) {
         $configLines = @(
-            'name=' + $Name,
+            ('name=' + $Name),
             'format_version=1',
-            'created_at=' + [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'),
+            ('created_at=' + [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')),
             'codex_history=shared'
         )
         [IO.File]::WriteAllLines($config, $configLines, $script:AgentShellUtf8NoBom)

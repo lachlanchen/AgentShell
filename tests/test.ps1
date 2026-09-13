@@ -397,8 +397,12 @@ try {
 
     $agentProfileCommand = (Get-Command agent-profile -CommandType Application, ExternalScript | Select-Object -First 1).Source
     Invoke-AgentCommand $agentProfileCommand @('create', 'workstation') | Out-Null
-    Assert-True ((Invoke-AgentCommand $agentProfileCommand @('history', 'workstation')) -contains 'shared') 'new accounts must use workstation history by default'
     $workstationRoot = Join-Path (Join-Path $stateRoot 'profiles') 'workstation'
+    $workstationConfig = [IO.File]::ReadAllLines((Join-Path $workstationRoot 'profile.conf'))
+    Assert-Equal 4 $workstationConfig.Length 'profile settings must be written on separate lines'
+    Assert-True ($workstationConfig -contains 'name=workstation') 'profile must store its exact account name'
+    Assert-True ($workstationConfig -contains 'codex_history=shared') 'profile must store its default history mode'
+    Assert-True ((Invoke-AgentCommand $agentProfileCommand @('history', 'workstation')) -contains 'shared') 'new accounts must use workstation history by default'
     $workstationView = Join-Path $workstationRoot 'codex-shared-home'
     Assert-True (Test-Path -LiteralPath (Join-Path $workstationView 'sessions') -PathType Container) 'new account must expose the shared rollout tree'
     Assert-False (Test-Path -LiteralPath (Join-Path $workstationView 'auth.json')) 'default shared history must not copy the ordinary credential'
