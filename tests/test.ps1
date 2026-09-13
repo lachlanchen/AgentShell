@@ -396,6 +396,15 @@ try {
     }
 
     $agentProfileCommand = (Get-Command agent-profile -CommandType Application, ExternalScript | Select-Object -First 1).Source
+    Invoke-AgentCommand $agentProfileCommand @('create', 'workstation') | Out-Null
+    Assert-True ((Invoke-AgentCommand $agentProfileCommand @('history', 'workstation')) -contains 'shared') 'new accounts must use workstation history by default'
+    $workstationRoot = Join-Path (Join-Path $stateRoot 'profiles') 'workstation'
+    $workstationView = Join-Path $workstationRoot 'codex-shared-home'
+    Assert-True (Test-Path -LiteralPath (Join-Path $workstationView 'sessions') -PathType Container) 'new account must expose the shared rollout tree'
+    Assert-False (Test-Path -LiteralPath (Join-Path $workstationView 'auth.json')) 'default shared history must not copy the ordinary credential'
+
+    # Explicit private history must survive repeated account registration.
+    Invoke-AgentCommand $agentProfileCommand @('history', 'personal', 'private') | Out-Null
     Invoke-AgentCommand $agentProfileCommand @('create', 'personal') | Out-Null
     Invoke-AgentCommand $agentProfileCommand @('create', 'personal') | Out-Null
     $personalRoot = Join-Path (Join-Path $stateRoot 'profiles') 'personal'
@@ -461,7 +470,7 @@ exit `$LASTEXITCODE
     $statusOutput = @(agentshell status)
     Assert-False ($statusOutput.Count -gt 0 -and $statusOutput[$statusOutput.Count - 1] -is [int]) 'interactive agentshell must not print its internal exit code'
     Assert-Equal 0 $LASTEXITCODE 'interactive agentshell status exit code'
-    Assert-True (@(agentshell --version) -contains 'AgentShell 0.4.0') 'installed AgentShell version'
+    Assert-True (@(agentshell --version) -contains 'AgentShell 0.5.0') 'installed AgentShell version'
 
     $env:CODEX_HOME = Join-Path $testRoot 'Ordinary Codex Home'
     $env:CODEX_SQLITE_HOME = Join-Path $testRoot 'Ordinary SQLite Home'

@@ -74,6 +74,8 @@ codexr
 
 That is the normal workflow. Replace `personal` with `lab` or `company` when needed. Once inside the named shell, plain `codex`, `codexr`, and `codexmv` all use that account.
 
+New accounts use the ordinary workstation history with their own login. Without a separate workstation resume wrapper, `codexr` keeps Codex's native current-directory filter; use `codexr --all` to see other project directories. To register an older private account for shared history, run `agent-profile history ACCOUNT shared` and reopen its shell. Re-registering an existing account preserves its configured history mode.
+
 For the first login only:
 
 ```text
@@ -243,7 +245,7 @@ Authentication and Codex history routing are separate choices.
 | `private` | Profile-local | Profile-local | Profile-local | Confidential separation |
 | `shared` | Profile-local | Shared default Codex index | Shared default Codex history | Resuming the same workstation sessions with several accounts |
 
-New profiles default to private history. Change a profile to shared history with:
+New profiles default to shared history. Existing profiles keep their configured mode. Register an older private profile for shared history with:
 
 ```bash
 agent-profile history personal shared

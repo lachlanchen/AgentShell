@@ -46,6 +46,18 @@ done
 export PATH="$AGENT_SHELL_BIN_DIR:$test_root/native:/usr/bin:/bin"
 export OPENAI_API_KEY='inherited-key-must-be-cleared'
 
+# New accounts expose workstation history while retaining their own login.
+agent-profile create workstation >/dev/null
+workstation="$AGENT_SHELL_HOME/profiles/workstation"
+test "$(agent-profile history workstation)" = shared
+agent-workstation-codex --version >/dev/null
+grep -q "^sqlite_home=$HOME/.codex$" "$AGENT_TEST_OUTPUT"
+grep -q "^codex_home=$workstation/codex-shared-home$" "$AGENT_TEST_OUTPUT"
+test "$(realpath "$workstation/codex-shared-home/sessions")" = "$(realpath "$HOME/.codex/sessions")"
+test ! -e "$workstation/codex-shared-home/auth.json"
+
+# Explicit private mode survives repeated registration and retains isolation.
+agent-profile history alpha private >/dev/null
 agent-profile create alpha >/dev/null
 profile="$AGENT_SHELL_HOME/profiles/alpha"
 
@@ -95,7 +107,7 @@ test -f "$profile/codex-shared-home/.account-state-v1"
 test -f "$profile/codex-shared-home/config.toml"
 test ! -L "$profile/codex-shared-home/config.toml"
 grep -q '^History mode:   shared$' <<<"$(agentshell status alpha)"
-grep -q '^AgentShell 0.4.0$' <<<"$(agentshell --version)"
+grep -q '^AgentShell 0.5.0$' <<<"$(agentshell --version)"
 
 # Optional Bash interception changes only calls that explicitly name an account.
 alias cr='printf existing-cr'
@@ -115,6 +127,21 @@ grep -q '^account=$' "$AGENT_TEST_OUTPUT"
 grep -q '^arg=resume$' "$AGENT_TEST_OUTPUT"
 grep -q '^arg=--all$' "$AGENT_TEST_OUTPUT"
 
+# Sharing history must preserve native current-directory filtering and argv.
+codexr >/dev/null
+test "$(sed -n 's/^arg=//p' "$AGENT_TEST_OUTPUT")" = resume
+grep -q '^account=$' "$AGENT_TEST_OUTPUT"
+codexr --account alpha >/dev/null
+test "$(sed -n 's/^arg=//p' "$AGENT_TEST_OUTPUT")" = resume
+grep -q '^account=alpha$' "$AGENT_TEST_OUTPUT"
+grep -q "^sqlite_home=$HOME/.codex$" "$AGENT_TEST_OUTPUT"
+codexr --last >/dev/null
+test "$(sed -n 's/^arg=//p' "$AGENT_TEST_OUTPUT")" = $'resume\n--last'
+codexr --account alpha 'session with spaces' 'prompt with spaces' >/dev/null
+test "$(sed -n 's/^arg=//p' "$AGENT_TEST_OUTPUT")" = $'resume\nsession with spaces\nprompt with spaces'
+codex resume >/dev/null
+test "$(sed -n 's/^arg=//p' "$AGENT_TEST_OUTPUT")" = resume
+
 codexmv '/old project' '/new project' --no-resume >/dev/null
 grep -q '^tool=codexmv$' "$AGENT_TEST_OUTPUT"
 grep -q '^account=$' "$AGENT_TEST_OUTPUT"
@@ -126,6 +153,7 @@ grep -q '^account=$' "$AGENT_TEST_OUTPUT"
 grep -q '^arg=-p$' "$AGENT_TEST_OUTPUT"
 grep -q '^arg=--account$' "$AGENT_TEST_OUTPUT"
 
+agent-profile history beta private >/dev/null
 codex --account beta --version >/dev/null
 grep -q '^account=beta$' "$AGENT_TEST_OUTPUT"
 grep -q '^arg=--version$' "$AGENT_TEST_OUTPUT"

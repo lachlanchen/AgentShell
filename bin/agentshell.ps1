@@ -10,7 +10,7 @@ param(
 
 Set-StrictMode -Version 2.0
 
-$script:AgentShellVersion = '0.4.0'
+$script:AgentShellVersion = '0.5.0'
 $script:AgentShellExitCode = 0
 $script:AgentShellRuntimePath = $PSCommandPath
 $script:AgentShellDataHome = if (-not [string]::IsNullOrWhiteSpace($env:AGENT_SHELL_HOME)) {
@@ -417,7 +417,7 @@ function Initialize-AgentShellProfile {
             'name=' + $Name,
             'format_version=1',
             'created_at=' + [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ'),
-            'codex_history=private'
+            'codex_history=shared'
         )
         [IO.File]::WriteAllLines($config, $configLines, $script:AgentShellUtf8NoBom)
         [IO.File]::WriteAllText($envFile, "# Optional private account-specific environment variables.`r`n# Prefer browser login. Do not commit credentials from this file.`r`n", $script:AgentShellUtf8Bom)

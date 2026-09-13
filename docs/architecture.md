@@ -11,7 +11,7 @@ AgentShell does not change the OS user, `HOME`, or `USERPROFILE`, and does not c
 | Gemini CLI | `GEMINI_CLI_HOME` | `gemini-home/` |
 | Copilot CLI | `COPILOT_HOME`, `COPILOT_CACHE_HOME` | `copilot-home/`, `cache/copilot/` |
 
-By default this gives each profile separate credentials, sessions, history, and provider state while preserving `PWD`, normal PATH entries, files, Git worktrees, Conda environments, and host tools. Codex history can then be shared explicitly.
+By default this gives each profile separate credentials and provider state while preserving `PWD`, normal PATH entries, files, Git worktrees, Conda environments, and host tools. New Codex profiles share the ordinary workstation history, so switching accounts retains native current-folder session discovery. Existing profiles keep their configured history mode; separate Codex history can be selected explicitly.
 
 Codex has a deliberate split:
 
@@ -26,7 +26,7 @@ agent-profile history lab private
 agent-profile history personal shared
 ```
 
-Shared history allows accounts to discover and resume the same indexed sessions. It also means a lab or company profile can see local titles/previews and rollout paths from that shared history, so private mode is the safer default.
+Shared history allows accounts to discover and resume the same indexed sessions, including local titles/previews and rollout paths. It is the default for newly registered accounts. Select private mode when a profile should use a separate history store. Registration never resets an existing profile's choice, and missing or invalid legacy history settings continue to fall back to private mode.
 
 Older AgentShell versions wrote a small number of rollouts into profile-local trees even when SQLite was shared. AgentShell 0.4 resolves a credential-isolated history view over the selected legacy tree instead of moving or rewriting those rollouts. New shared-mode sessions use the common tree. Cross-tree lineage should be recovered only after confirming that every source rollout is inactive; AgentShell never rewrites rollout JSONL or live SQLite state.
 

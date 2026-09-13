@@ -6,8 +6,8 @@ Codex is the primary integration. Each account gets independent authentication t
 
 Each profile chooses one of two history modes:
 
-- `private`: profile-local index and rollout tree; strongest separation and the default.
-- `shared`: one existing Codex index and rollout tree for cross-account resume workflows.
+- `private`: profile-local index and rollout tree, selected explicitly for separate sessions.
+- `shared`: one existing Codex index and rollout tree for cross-account resume workflows; the default for new profiles. Existing profiles retain their configured mode.
 
 ```bash
 agent-profile history personal shared

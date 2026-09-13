@@ -82,7 +82,7 @@ AgentShell is intentionally lighter than Docker. It separates application state 
 ## Why AgentShell
 
 - **Independent authentication:** every label has its own Codex `auth.json` and provider state.
-- **Optional shared history:** accounts may resume one coherent Codex index and rollout tree while credentials remain separate.
+- **Shared history by default:** new accounts resume the workstation Codex index and rollout tree while credentials remain separate; private history is available explicitly.
 - **No workspace copies:** Git repositories, Conda environments, build tools, and files stay exactly where they are.
 - **Native arguments preserved:** models, prompts, sandbox options, search, images, and future CLI flags pass through.
 - **Fast workstation resume:** existing `codexr`, `/rename`, partial-path search, and `codexmv` workflows remain available.
@@ -181,7 +181,7 @@ Codex documents `CODEX_HOME` as its state root and `CODEX_SQLITE_HOME` as the lo
 
 ### Sessions missing after switching accounts?
 
-New accounts default to private history, so their picker does not show sessions from your ordinary Codex home. To locate saved sessions, run:
+New accounts default to shared history and can find the same current-folder sessions as ordinary Codex. Existing accounts keep their configured mode, so an older private account can still hide workstation sessions. To locate saved sessions, run:
 
 ```bash
 agent-profile sessions company
@@ -217,7 +217,18 @@ Inside Codex, `/status` remains the authoritative view of the authenticated iden
 
 ## Resume and migrate sessions
 
-AgentShell preserves existing workstation `codexr` and `codexmv` wrappers. On Windows without a separate `codexr`, it falls back to `codex resume`; workstation-only picker flags and `codexmv` require those pre-existing wrappers.
+AgentShell preserves existing workstation `codexr` and `codexmv` wrappers. Without a separate resume wrapper, `codexr` falls back to `codex resume`, preserving native current-directory filtering. Use `codexr --all` to show other project directories, including when launching from `~` or `~/Projects`; workstation-only picker flags and `codexmv` require pre-existing wrappers.
+
+Directory scope and account history are separate. To show the ordinary workstation history with each existing account, enable sharing for each one, then reopen its shell:
+
+```bash
+agent-profile history personal shared
+agent-profile history lab shared
+agentshell lab
+codexr
+```
+
+Account logins remain separate. New profiles use shared history automatically. To isolate a profile's sessions, run `agent-profile history ACCOUNT private`. Already-running shells retain their old history environment until reopened. Account registration is idempotent and does not reset an existing history choice.
 
 ```bash
 # Exact current directory
