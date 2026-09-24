@@ -17,6 +17,10 @@ AgentShell を使うと、プロジェクトを複製したり Unix ユーザー
 | --- | --- | --- |
 | [![Donate](https://img.shields.io/badge/Donate-LazyingArt-0EA5E9?style=for-the-badge&logo=kofi&logoColor=white)](https://chat.lazying.art/donate) | [![PayPal](https://img.shields.io/badge/PayPal-RongzhouChen-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/RongzhouChen) | [![Stripe](https://img.shields.io/badge/Stripe-Donate-635BFF?style=for-the-badge&logo=stripe&logoColor=white)](https://buy.stripe.com/aFadR8gIaflgfQV6T4fw400) |
 
+## Codex 起動時のタイムアウト対策
+
+Linux/WSL では、画面の初期化中に発生する `account/read` のワークスペース・ルーティングのタイムアウトに限り、最大 3 回まで試行します。アカウント、作業フォルダー、選択したセッションは変えず、自動処理や別のエラー、起動済みのセッションは再実行しません。`agentshell -v` でアカウントを確認でき、再ログインは不要です。[詳細と無効化方法](../docs/codex-startup-retry.md)。
+
 ## 主な機能
 
 - ラベルごとに独立した Codex 認証とプロバイダー状態を保持します。
@@ -125,4 +129,3 @@ git diff --check
 ## 状態とライセンス
 
 AgentShell は継続的に保守されている、依存関係の少ない Bash ユーティリティです。Codex が主要な検証済み統合で、その他のアダプターは各ツールの公開状態ディレクトリ機構に従います。[MIT License](../LICENSE) で提供されます。
-

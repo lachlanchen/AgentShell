@@ -17,6 +17,10 @@ AgentShell permite que las terminales personal, de laboratorio y de empresa usen
 | --- | --- | --- |
 | [![Donate](https://img.shields.io/badge/Donate-LazyingArt-0EA5E9?style=for-the-badge&logo=kofi&logoColor=white)](https://chat.lazying.art/donate) | [![PayPal](https://img.shields.io/badge/PayPal-RongzhouChen-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/RongzhouChen) | [![Stripe](https://img.shields.io/badge/Stripe-Donate-635BFF?style=for-the-badge&logo=stripe&logoColor=white)](https://buy.stripe.com/aFadR8gIaflgfQV6T4fw400) |
 
+## Reintentos al iniciar Codex
+
+En Linux/WSL, AgentShell reintenta únicamente el tiempo de espera de enrutamiento de `account/read` durante el inicio de la interfaz, con un máximo de tres intentos. Conserva la cuenta, el directorio y la sesión seleccionada; no repite automatizaciones, otros errores ni sesiones que ya funcionan. Consulta la cuenta con `agentshell -v`; no hace falta volver a iniciar sesión. [Detalles y desactivación](../docs/codex-startup-retry.md).
+
 ## Capacidades principales
 
 - Autenticación de Codex y estado del proveedor independientes para cada etiqueta.
@@ -125,4 +129,3 @@ Si utilizas AgentShell en investigación o herramientas, cita este repositorio. 
 ## Estado y licencia
 
 AgentShell es una utilidad Bash ligera y mantenida activamente. Codex es la integración principal verificada; los demás adaptadores siguen los controles públicos de directorios de estado. Se distribuye bajo la [licencia MIT](../LICENSE).
-

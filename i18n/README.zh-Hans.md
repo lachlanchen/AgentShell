@@ -17,6 +17,10 @@ AgentShell 让个人、实验室和公司终端分别使用独立的 Codex 登�
 | --- | --- | --- |
 | [![Donate](https://img.shields.io/badge/Donate-LazyingArt-0EA5E9?style=for-the-badge&logo=kofi&logoColor=white)](https://chat.lazying.art/donate) | [![PayPal](https://img.shields.io/badge/PayPal-RongzhouChen-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/RongzhouChen) | [![Stripe](https://img.shields.io/badge/Stripe-Donate-635BFF?style=for-the-badge&logo=stripe&logoColor=white)](https://buy.stripe.com/aFadR8gIaflgfQV6T4fw400) |
 
+## Codex 启动超时重试
+
+在 Linux/WSL 上，仅当界面启动阶段的 `account/read` 工作区路由发现超时时，才自动重试，总共最多尝试三次。始终使用同一账户、目录和选定会话，不重跑自动化任务、其他错误或已启动的会话。用 `agentshell -v` 查看账户，无需重新登录。[原理、保护措施和关闭方法](../docs/codex-startup-retry.md)。
+
 ## 核心能力
 
 - 每个标签拥有独立的 Codex 认证和提供商状态。
@@ -125,4 +129,3 @@ git diff --check
 ## 状态与许可
 
 AgentShell 是持续维护、依赖极少的 Bash 工具。Codex 是主要的已验证集成，其他适配器遵循各工具公开的状态目录机制。项目采用 [MIT License](../LICENSE)。
-

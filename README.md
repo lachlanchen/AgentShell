@@ -62,6 +62,12 @@ agent-desktop lab
 
 [Installation, login, APT updates, and isolation details](docs/desktop-linux.md).
 
+## Intermittent Codex account startup timeout
+
+On Linux/WSL, named-account CLI launches now retry **only** the exact `account/read` workspace-routing timeout during TUI bootstrap: at most three attempts, keeping the same account, directory, arguments, and selected session. Healthy launches have no extra network preflight. Login, automation, other errors, and successful sessions are not retried.
+
+Use your usual `agentshell company` → `codexr`, or `codex --account lab`. Check the selected profile with `agentshell -v`. No new login is required. [Cause, safeguards, workstation-wrapper integration, and opt-out](docs/codex-startup-retry.md).
+
 ## One folder, several identities
 
 ```text

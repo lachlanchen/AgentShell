@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+
+import os
+import re
+import selectors
+import signal
+import subprocess
+import sys
+import time
+
+
+TIMEOUT_LINE = re.compile(
+    rb"(?:Error|ERROR): account/read failed during TUI bootstrap: "
+    rb"account/read failed: workspace routing discovery timed out \(code -32603\)"
+)
+VALUE_OPTIONS = {
+    "-c", "--config", "--enable", "--disable", "-m", "--model",
+    "-p", "--profile", "-s", "--sandbox", "-a", "--ask-for-approval",
+    "-C", "--cd", "--add-dir",
+}
+FLAG_OPTIONS = {
+    "--strict-config", "--full-auto", "--approve-for-me",
+    "--dangerously-bypass-approvals-and-sandbox", "--no-alt-screen",
+    "--search", "--last", "--all",
+}
+OTHER_COMMANDS = {
+    "agents", "exec", "e", "review", "login", "logout", "mcp", "plugin",
+    "app-server", "remote-control", "completion", "update", "doctor",
+    "sandbox", "debug", "apply", "a", "queue", "archive", "delete",
+    "migrate-rollouts", "unarchive", "cloud", "exec-server", "features", "help",
+}
+
+
+def interactive_arguments(arguments):
+    positional = []
+    position = 0
+    while position < len(arguments):
+        argument = arguments[position]
+        option, separator, _ = argument.partition("=")
+        if option in VALUE_OPTIONS:
+            position += 1 if separator else 2
+            if position > len(arguments):
+                return False
+            continue
+        if argument in FLAG_OPTIONS:
+            position += 1
+            continue
+        if argument == "--":
+            positional.extend(arguments[position + 1:])
+            break
+        if argument.startswith("-"):
+            return False
+        positional.append(argument)
+        position += 1
+    return not positional or positional[0] not in OTHER_COMMANDS
+
+
+def attempt_limit():
+    try:
+        return max(1, min(5, int(os.environ.get("CODEX_STARTUP_ATTEMPTS", "3"))))
+    except ValueError:
+        return 1
+
+
+def retryable(returncode, tail, elapsed):
+    lines = tail.strip().splitlines()
+    return (
+        returncode == 1
+        and elapsed < 120
+        and bool(lines)
+        and TIMEOUT_LINE.fullmatch(lines[-1].strip()) is not None
+    )
+
+
+def run_attempt(command, interrupted):
+    tail = bytearray()
+    started = time.monotonic()
+    with subprocess.Popen(command, stderr=subprocess.PIPE) as process:
+        interrupted["process"] = process
+        if interrupted["signal"]:
+            process.send_signal(interrupted["signal"])
+        descriptor = process.stderr.fileno()
+        os.set_blocking(descriptor, False)
+        exited_at = None
+        with selectors.DefaultSelector() as selector:
+            selector.register(descriptor, selectors.EVENT_READ)
+            while True:
+                events = selector.select(timeout=0.25)
+                for event in events:
+                    try:
+                        chunk = os.read(descriptor, 8192)
+                    except BlockingIOError:
+                        continue
+                    if not chunk:
+                        selector.unregister(descriptor)
+                        continue
+                    sys.stderr.buffer.write(chunk)
+                    sys.stderr.buffer.flush()
+                    tail.extend(chunk)
+                    del tail[:-65536]
+                if process.poll() is not None:
+                    exited_at = exited_at or time.monotonic()
+                    if not events or time.monotonic() - exited_at > 0.5:
+                        break
+        returncode = process.wait()
+    interrupted["process"] = None
+    return returncode, bytes(tail), time.monotonic() - started
+
+
+def main():
+    command = sys.argv[1:]
+    if not command:
+        print("Usage: codex-startup /absolute/path/to/codex [arguments...]", file=sys.stderr)
+        return 2
+    attempts = attempt_limit()
+    if (
+        sys.platform != "linux"
+        or attempts == 1
+        or not sys.stdin.isatty()
+        or not sys.stdout.isatty()
+        or not sys.stderr.isatty()
+        or os.environ.get("TERM") == "dumb"
+        or not interactive_arguments(command[1:])
+    ):
+        os.execvpe(command[0], command, os.environ)
+
+    interrupted = {"signal": 0, "process": None}
+
+    def cancel(signum, frame):
+        interrupted["signal"] = signum
+        process = interrupted["process"]
+        if process is not None and process.poll() is None:
+            try:
+                process.send_signal(signum)
+            except ProcessLookupError:
+                pass
+
+    for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        signal.signal(signum, cancel)
+
+    for attempt in range(1, attempts + 1):
+        if interrupted["signal"]:
+            return 128 + interrupted["signal"]
+        returncode, tail, elapsed = run_attempt(command, interrupted)
+        if interrupted["signal"]:
+            return 128 + interrupted["signal"]
+        if not retryable(returncode, tail, elapsed) or attempt == attempts:
+            return returncode if returncode >= 0 else 128 - returncode
+        delay = 2 ** attempt
+        account = os.environ.get("AGENT_SHELL_ACCOUNT", "current")
+        account = re.sub(r"[^A-Za-z0-9._-]", "?", account)[:64]
+        print(
+            f"AgentShell [{account}]: Codex account routing timed out before startup. "
+            f"Retry {attempt + 1}/{attempts} in {delay}s; same account and session. "
+            "Ctrl+C cancels.",
+            file=sys.stderr,
+        )
+        deadline = time.monotonic() + delay
+        while time.monotonic() < deadline:
+            if interrupted["signal"]:
+                return 128 + interrupted["signal"]
+            time.sleep(0.1)
+    return 1
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except FileNotFoundError as error:
+        print(f"codex-startup: executable not found: {error.filename}", file=sys.stderr)
+        raise SystemExit(127)

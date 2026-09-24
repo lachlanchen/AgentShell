@@ -19,6 +19,10 @@
 | --- | --- | --- |
 | [![Donate](https://img.shields.io/badge/Donate-LazyingArt-0EA5E9?style=for-the-badge&logo=kofi&logoColor=white)](https://chat.lazying.art/donate) | [![PayPal](https://img.shields.io/badge/PayPal-RongzhouChen-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/RongzhouChen) | [![Stripe](https://img.shields.io/badge/Stripe-Donate-635BFF?style=for-the-badge&logo=stripe&logoColor=white)](https://buy.stripe.com/aFadR8gIaflgfQV6T4fw400) |
 
+## إعادة المحاولة عند بدء Codex
+
+على Linux/WSL، يعيد AgentShell المحاولة ثلاث مرات كحد أقصى فقط عند انتهاء مهلة توجيه مساحة العمل في `account/read` أثناء بدء الواجهة. يبقى الحساب والمجلد والجلسة كما هي؛ ولا تُعاد الأوامر الآلية أو الأخطاء الأخرى أو الجلسات الناجحة. استخدم `agentshell -v` لفحص الحساب؛ ولا يلزم تسجيل الدخول مجددًا. [التفاصيل وإلغاء التفعيل](../docs/codex-startup-retry.md).
+
 ## القدرات الأساسية
 
 - مصادقة Codex وحالة المزود منفصلتان لكل تسمية.
@@ -129,4 +133,3 @@ git diff --check
 AgentShell أداة Bash خفيفة قليلة الاعتماديات وتخضع لصيانة مستمرة. Codex هو التكامل الرئيسي الذي جرى التحقق منه، وتتبع المحولات الأخرى آليات مجلدات الحالة المعلنة لأدواتها. يصدر المشروع وفق [رخصة MIT](../LICENSE).
 
 </div>
-

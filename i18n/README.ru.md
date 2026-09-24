@@ -17,6 +17,10 @@ AgentShell позволяет личному, лабораторному и ко
 | --- | --- | --- |
 | [![Donate](https://img.shields.io/badge/Donate-LazyingArt-0EA5E9?style=for-the-badge&logo=kofi&logoColor=white)](https://chat.lazying.art/donate) | [![PayPal](https://img.shields.io/badge/PayPal-RongzhouChen-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/RongzhouChen) | [![Stripe](https://img.shields.io/badge/Stripe-Donate-635BFF?style=for-the-badge&logo=stripe&logoColor=white)](https://buy.stripe.com/aFadR8gIaflgfQV6T4fw400) |
 
+## Повтор запуска Codex при тайм-ауте
+
+В Linux/WSL AgentShell выполняет до трёх попыток только при тайм-ауте маршрутизации `account/read` во время запуска интерфейса. Аккаунт, каталог и выбранная сессия не меняются; автоматизация, другие ошибки и уже запущенные сессии не вызывают повторного запуска. Проверить аккаунт можно командой `agentshell -v`; повторный вход не нужен. [Подробности и отключение](../docs/codex-startup-retry.md).
+
 ## Основные возможности
 
 - Независимая аутентификация Codex и состояние поставщика для каждой метки.
@@ -125,4 +129,3 @@ git diff --check
 ## Состояние и лицензия
 
 AgentShell — активно поддерживаемая Bash-утилита с минимальными зависимостями. Codex является основной проверенной интеграцией; остальные адаптеры следуют публичным механизмам каталогов состояния своих инструментов. Проект распространяется по [лицензии MIT](../LICENSE).
-

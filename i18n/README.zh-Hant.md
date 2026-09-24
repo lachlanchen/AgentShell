@@ -17,6 +17,10 @@ AgentShell 讓個人、實驗室與公司終端分別使用獨立的 Codex 登�
 | --- | --- | --- |
 | [![Donate](https://img.shields.io/badge/Donate-LazyingArt-0EA5E9?style=for-the-badge&logo=kofi&logoColor=white)](https://chat.lazying.art/donate) | [![PayPal](https://img.shields.io/badge/PayPal-RongzhouChen-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/RongzhouChen) | [![Stripe](https://img.shields.io/badge/Stripe-Donate-635BFF?style=for-the-badge&logo=stripe&logoColor=white)](https://buy.stripe.com/aFadR8gIaflgfQV6T4fw400) |
 
+## Codex 啟動逾時重試
+
+在 Linux/WSL 上，僅當介面啟動階段的 `account/read` 工作區路由探索逾時，才自動重試，總共最多嘗試三次。始終使用同一帳戶、目錄及選定的工作階段，不重跑自動化任務、其他錯誤或已啟動的工作階段。用 `agentshell -v` 查看帳戶，無需重新登入。[原理、保護措施與關閉方法](../docs/codex-startup-retry.md)。
+
 ## 核心能力
 
 - 每個標籤都有獨立的 Codex 驗證與供應商狀態。
@@ -125,4 +129,3 @@ git diff --check
 ## 狀態與授權
 
 AgentShell 是持續維護、相依性極少的 Bash 工具。Codex 是主要且已驗證的整合，其他介接遵循各工具公開的狀態目錄機制。專案採用 [MIT License](../LICENSE)。
-

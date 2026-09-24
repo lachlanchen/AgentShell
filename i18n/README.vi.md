@@ -17,6 +17,10 @@ AgentShell cho phép terminal cá nhân, phòng thí nghiệm và công ty dùng
 | --- | --- | --- |
 | [![Donate](https://img.shields.io/badge/Donate-LazyingArt-0EA5E9?style=for-the-badge&logo=kofi&logoColor=white)](https://chat.lazying.art/donate) | [![PayPal](https://img.shields.io/badge/PayPal-RongzhouChen-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/RongzhouChen) | [![Stripe](https://img.shields.io/badge/Stripe-Donate-635BFF?style=for-the-badge&logo=stripe&logoColor=white)](https://buy.stripe.com/aFadR8gIaflgfQV6T4fw400) |
 
+## Thử lại khi Codex khởi động bị hết thời gian
+
+Trên Linux/WSL, AgentShell chỉ thử lại lỗi hết thời gian định tuyến không gian làm việc của `account/read` khi khởi tạo giao diện, tối đa ba lần. Tài khoản, thư mục và phiên đã chọn không thay đổi; tác vụ tự động, lỗi khác và phiên đã khởi động không được chạy lại. Dùng `agentshell -v` để kiểm tra tài khoản; không cần đăng nhập lại. [Chi tiết và cách tắt](../docs/codex-startup-retry.md).
+
 ## Khả năng chính
 
 - Mỗi nhãn có xác thực Codex và trạng thái nhà cung cấp độc lập.
@@ -125,4 +129,3 @@ Nếu dùng AgentShell trong nghiên cứu hoặc công cụ, hãy trích dẫn 
 ## Trạng thái và giấy phép
 
 AgentShell là tiện ích Bash ít phụ thuộc và được duy trì tích cực. Codex là tích hợp chính đã được xác minh; các bộ điều hợp khác tuân theo cơ chế thư mục trạng thái công khai của từng công cụ. Dự án dùng [giấy phép MIT](../LICENSE).
-

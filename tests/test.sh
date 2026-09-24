@@ -160,6 +160,17 @@ grep -q '^arg=--version$' "$AGENT_TEST_OUTPUT"
 grep -q "^sqlite_home=$AGENT_SHELL_HOME/profiles/beta/codex-home$" "$AGENT_TEST_OUTPUT"
 test "$profile" != "$AGENT_SHELL_HOME/profiles/beta"
 
+(
+  export AGENT_SHELL_ACCOUNT=alpha
+  codex --version >/dev/null
+  grep -q '^account=alpha$' "$AGENT_TEST_OUTPUT"
+  grep -q '^arg=--version$' "$AGENT_TEST_OUTPUT"
+  codexr --last >/dev/null
+  grep -q '^account=alpha$' "$AGENT_TEST_OUTPUT"
+  grep -q '^arg=resume$' "$AGENT_TEST_OUTPUT"
+  grep -q '^arg=--last$' "$AGENT_TEST_OUTPUT"
+)
+
 if agent-codex --account= --version >/dev/null 2>&1; then
   printf 'empty account value was unexpectedly accepted\n' >&2
   exit 1

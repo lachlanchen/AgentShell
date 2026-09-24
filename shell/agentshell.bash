@@ -14,6 +14,8 @@ codex() {
     command agent-codex "$@"
   elif [ -x "$HOME/scripts/codex_wrapper.sh" ]; then
     "$HOME/scripts/codex_wrapper.sh" codex "$@"
+  elif [ -n "${AGENT_SHELL_ACCOUNT:-}" ]; then
+    command agent-codex --account "$AGENT_SHELL_ACCOUNT" "$@"
   else
     command codex "$@"
   fi
@@ -24,6 +26,8 @@ codexr() {
     command agent-codexr "$@"
   elif [ -x "$HOME/scripts/codex_wrapper.sh" ]; then
     "$HOME/scripts/codex_wrapper.sh" codexr "$@"
+  elif [ -n "${AGENT_SHELL_ACCOUNT:-}" ]; then
+    command agent-codexr --account "$AGENT_SHELL_ACCOUNT" "$@"
   else
     command codex resume "$@"
   fi

@@ -13,6 +13,7 @@ commands=(agentshell agent-run agent-profile agent-codex agent-codexr agent-code
 install -d -m 0755 "$install_root" "$bin_dir" "$(dirname -- "$shell_helper")"
 install -m 0755 "$repo_root/bin/agentshell" "$install_root/agentshell"
 install -m 0755 "$repo_root/bin/agent-desktop" "$install_root/agent-desktop"
+install -m 0755 "$repo_root/bin/codex-startup" "$install_root/codex-startup"
 install -m 0644 "$repo_root/shell/agentshell.bash" "$shell_helper"
 
 for command_name in "${commands[@]}"; do

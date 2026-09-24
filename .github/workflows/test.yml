@@ -16,6 +16,8 @@ jobs:
         run: bash -n bin/agentshell shell/agentshell.bash install.sh tests/test.sh
       - name: Run integration tests
         run: bash tests/test.sh
+      - name: Verify Linux Codex startup retry boundaries
+        run: python3 -m unittest discover -s tests -p test_startup.py -v
 
   powershell-5-1:
     runs-on: windows-latest

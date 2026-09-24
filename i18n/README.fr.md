@@ -17,6 +17,10 @@ AgentShell permet aux terminaux personnel, laboratoire et entreprise d'utiliser 
 | --- | --- | --- |
 | [![Donate](https://img.shields.io/badge/Donate-LazyingArt-0EA5E9?style=for-the-badge&logo=kofi&logoColor=white)](https://chat.lazying.art/donate) | [![PayPal](https://img.shields.io/badge/PayPal-RongzhouChen-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/RongzhouChen) | [![Stripe](https://img.shields.io/badge/Stripe-Donate-635BFF?style=for-the-badge&logo=stripe&logoColor=white)](https://buy.stripe.com/aFadR8gIaflgfQV6T4fw400) |
 
+## Délai de routage au démarrage de Codex
+
+Sous Linux/WSL, AgentShell réessaie uniquement après le délai de routage `account/read` au démarrage de l’interface, avec trois tentatives au maximum. Le compte, le dossier et la session choisie restent identiques ; les automatisations, les autres erreurs et les sessions déjà démarrées ne sont pas relancées. Vérifiez le compte avec `agentshell -v` ; aucune nouvelle connexion n’est nécessaire. [Détails et désactivation](../docs/codex-startup-retry.md).
+
 ## Capacités principales
 
 - Authentification Codex et état du fournisseur indépendants pour chaque étiquette.
@@ -125,4 +129,3 @@ Si vous utilisez AgentShell dans des travaux de recherche ou des outils, citez c
 ## État et licence
 
 AgentShell est un utilitaire Bash léger et activement maintenu. Codex est l'intégration principale validée ; les autres adaptateurs suivent les mécanismes publics de répertoire d'état. Le projet est distribué sous [licence MIT](../LICENSE).
-

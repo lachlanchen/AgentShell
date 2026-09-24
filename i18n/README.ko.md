@@ -17,6 +17,10 @@ AgentShell은 프로젝트 복사, Unix 사용자 변경, 컨테이너 유지 �
 | --- | --- | --- |
 | [![Donate](https://img.shields.io/badge/Donate-LazyingArt-0EA5E9?style=for-the-badge&logo=kofi&logoColor=white)](https://chat.lazying.art/donate) | [![PayPal](https://img.shields.io/badge/PayPal-RongzhouChen-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/RongzhouChen) | [![Stripe](https://img.shields.io/badge/Stripe-Donate-635BFF?style=for-the-badge&logo=stripe&logoColor=white)](https://buy.stripe.com/aFadR8gIaflgfQV6T4fw400) |
 
+## Codex 시작 시간 초과 재시도
+
+Linux/WSL에서는 인터페이스 초기화 중 `account/read` 작업 공간 라우팅 시간 초과가 발생한 경우에만 최대 세 번 시도합니다. 계정, 폴더, 선택한 세션을 유지하며 자동화 작업, 다른 오류, 이미 시작된 세션은 다시 실행하지 않습니다. `agentshell -v`로 계정을 확인할 수 있으며 재로그인은 필요 없습니다. [설명 및 비활성화 방법](../docs/codex-startup-retry.md).
+
 ## 핵심 기능
 
 - 각 레이블에 독립적인 Codex 인증과 공급자 상태를 제공합니다.
@@ -125,4 +129,3 @@ git diff --check
 ## 상태와 라이선스
 
 AgentShell은 지속적으로 관리되는 의존성이 적은 Bash 유틸리티입니다. Codex가 주 검증 통합이며 다른 어댑터는 각 도구의 공개 상태 디렉터리 방식을 따릅니다. [MIT License](../LICENSE)로 배포됩니다.
-

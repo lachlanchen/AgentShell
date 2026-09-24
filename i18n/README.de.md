@@ -17,6 +17,10 @@ AgentShell ermöglicht persönliche, Labor- und Firmen-Terminals mit unterschied
 | --- | --- | --- |
 | [![Donate](https://img.shields.io/badge/Donate-LazyingArt-0EA5E9?style=for-the-badge&logo=kofi&logoColor=white)](https://chat.lazying.art/donate) | [![PayPal](https://img.shields.io/badge/PayPal-RongzhouChen-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/RongzhouChen) | [![Stripe](https://img.shields.io/badge/Stripe-Donate-635BFF?style=for-the-badge&logo=stripe&logoColor=white)](https://buy.stripe.com/aFadR8gIaflgfQV6T4fw400) |
 
+## Codex-Start bei Routing-Zeitüberschreitungen
+
+Unter Linux/WSL wiederholt AgentShell ausschließlich den `account/read`-Routing-Timeout beim TUI-Start, mit höchstens drei Versuchen. Konto, Verzeichnis und ausgewählte Sitzung bleiben gleich; Automatisierung, andere Fehler und erfolgreiche Sitzungen werden nicht wiederholt. `agentshell -v` zeigt das gewählte Konto; eine neue Anmeldung ist nicht nötig. [Details und Deaktivierung](../docs/codex-startup-retry.md).
+
 ## Kernfunktionen
 
 - Eigenständige Codex-Authentifizierung und Provider-Zustände für jedes Label.
@@ -125,4 +129,3 @@ Wenn AgentShell in Forschung oder Werkzeugen verwendet wird, zitieren Sie dieses
 ## Status und Lizenz
 
 AgentShell ist ein aktiv gepflegtes, abhängigkeitsarmes Bash-Werkzeug. Codex ist die primäre geprüfte Integration; andere Adapter folgen den öffentlichen Zustandsverzeichnis-Mechanismen ihrer Werkzeuge. Veröffentlicht unter der [MIT-Lizenz](../LICENSE).
-

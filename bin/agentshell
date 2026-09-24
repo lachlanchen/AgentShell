@@ -436,10 +436,12 @@ agent_shell_run_tool() {
   case "$tool" in
     codex)
       command_path="$(agent_shell_command_path codex)" || agent_shell_die "codex executable not found"
+      agent_shell_codex_start "$command_path" "$@"
       exec "$command_path" "$@"
       ;;
     codexr)
       command_path="$(agent_shell_command_path codex)" || agent_shell_die "codex executable not found"
+      agent_shell_codex_start "$command_path" resume "$@"
       exec "$command_path" resume "$@"
       ;;
     codexmv)
@@ -455,6 +457,13 @@ agent_shell_run_tool() {
       exec "$command_path" "$@"
       ;;
   esac
+}
+
+agent_shell_codex_start() {
+  local launcher="$(dirname -- "$agent_shell_self")/codex-startup"
+  if [ -f "$launcher" ] && command -v python3 >/dev/null 2>&1; then
+    exec python3 "$launcher" "$@"
+  fi
 }
 
 agent_shell_write_bashrc() {
