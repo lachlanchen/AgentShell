@@ -18,6 +18,8 @@ Independent HTTPS probes also observed intermittent TCP/TLS stalls to one of Cha
 
 This establishes a native discovery timeout plus intermittent transport trouble, but does not identify which router, upstream network or service caused every failed request. Both wired and Wi-Fi paths subsequently worked. No global DNS/route changes or permanent CDN-IP pinning were made. The guard is bounded recovery, not a claim that the underlying network/service fault has been permanently repaired.
 
+A later three-round, interface-bound comparison strengthened the network evidence: Wi-Fi completed all six unauthenticated HTTPS probes in 0.30–0.49 seconds; wired completed four of six in 0.77–2.28 seconds and timed out connecting to both addresses in the third round. The default route used wired networking. This points to the wired upstream path rather than a permanent bad CDN IP, but the exact failing gateway/hop was not identified. Existing routes and active sessions were intentionally left untouched.
+
 ## Use it
 
 Install/update AgentShell normally:
