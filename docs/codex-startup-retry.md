@@ -12,7 +12,11 @@ Manual retries may work. This error is not itself evidence of a broken session d
 
 In the [0.156.1 account processor](https://github.com/openai/codex/blob/rust-v0.156.1/codex-rs/app-server/src/request_processors/account_processor/workspace_routing.rs), `read_account` wraps configuration/authentication loading and workspace-routing discovery in a **15-second timeout**. Discovery calls `get_accounts_check`; results are cached within that app-server process. A separate successful preflight process cannot populate a later TUI process's cache.
 
-On 2026-09-24, direct native app-server `account/read` probes under two separate selected accounts both succeeded: approximately 1.2 seconds cold and 0.01–0.03 seconds warm. The user reported intermittent failures followed by successful manual retries. The exact reason for the slow failed requests was not captured; do not claim DNS, account corruption, or AgentShell caused it. The guard below is a bounded recovery measure, not a server-side timeout fix.
+On 2026-09-24, initial direct native app-server `account/read` probes under two separate selected accounts both succeeded: approximately 1.2 seconds cold and 0.01–0.03 seconds warm. A subsequent six-process sample **without AgentShell** reproduced four discovery timeouts at 15.006–15.013 seconds; two calls succeeded in approximately 2.3 seconds. This is not solely a wrapper/picker failure.
+
+Independent HTTPS probes also observed intermittent TCP/TLS stalls to one of ChatGPT's two DNS-returned IPv4 addresses, while the other responded promptly. Both addresses later responded normally. Router DNS answers agreed with Google and Cloudflare DNS-over-HTTPS; this was not evidence of a wrong DNS record. An unauthenticated `401` from the accounts-check endpoint was expected for those transport probes and did not mean the saved Codex login failed.
+
+This establishes a native discovery timeout plus intermittent transport trouble, but does not identify which router, upstream network or service caused every failed request. Both wired and Wi-Fi paths subsequently worked. No global DNS/route changes or permanent CDN-IP pinning were made. The guard is bounded recovery, not a claim that the underlying network/service fault has been permanently repaired.
 
 ## Use it
 
