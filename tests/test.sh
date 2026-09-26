@@ -132,13 +132,13 @@ codexr >/dev/null
 test "$(sed -n 's/^arg=//p' "$AGENT_TEST_OUTPUT")" = resume
 grep -q '^account=$' "$AGENT_TEST_OUTPUT"
 codexr --account alpha >/dev/null
-test "$(sed -n 's/^arg=//p' "$AGENT_TEST_OUTPUT")" = resume
+test "$(sed -n '/^arg=--no-daemon$/d; s/^arg=//p' "$AGENT_TEST_OUTPUT")" = resume
 grep -q '^account=alpha$' "$AGENT_TEST_OUTPUT"
 grep -q "^sqlite_home=$HOME/.codex$" "$AGENT_TEST_OUTPUT"
 codexr --last >/dev/null
 test "$(sed -n 's/^arg=//p' "$AGENT_TEST_OUTPUT")" = $'resume\n--last'
 codexr --account alpha 'session with spaces' 'prompt with spaces' >/dev/null
-test "$(sed -n 's/^arg=//p' "$AGENT_TEST_OUTPUT")" = $'resume\nsession with spaces\nprompt with spaces'
+test "$(sed -n '/^arg=--no-daemon$/d; s/^arg=//p' "$AGENT_TEST_OUTPUT")" = $'resume\nsession with spaces\nprompt with spaces'
 codex resume >/dev/null
 test "$(sed -n 's/^arg=//p' "$AGENT_TEST_OUTPUT")" = resume
 
