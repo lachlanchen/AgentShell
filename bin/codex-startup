@@ -21,7 +21,7 @@ VALUE_OPTIONS = {
 FLAG_OPTIONS = {
     "--strict-config", "--full-auto", "--approve-for-me",
     "--dangerously-bypass-approvals-and-sandbox", "--no-alt-screen",
-    "--search", "--last", "--all",
+    "--search", "--last", "--all", "--no-daemon",
 }
 OTHER_COMMANDS = {
     "agents", "exec", "e", "review", "login", "logout", "mcp", "plugin",
@@ -60,6 +60,26 @@ def attempt_limit():
         return max(1, min(5, int(os.environ.get("CODEX_STARTUP_ATTEMPTS", "3"))))
     except ValueError:
         return 1
+
+
+def socket_safe_command(command):
+    """Codex 0.157 resolves CODEX_HOME before connecting to its Unix socket."""
+    if (
+        sys.platform != "linux"
+        or not os.environ.get("AGENT_SHELL_ACCOUNT")
+        or not interactive_arguments(command[1:])
+        or "--no-daemon" in command[1:]
+    ):
+        return command
+    codex_home = os.environ.get("CODEX_HOME")
+    if not codex_home:
+        return command
+    socket_path = os.path.join(
+        os.path.realpath(codex_home), "app-server-control", "app-server-control.sock"
+    )
+    if len(os.fsencode(socket_path)) >= 108:
+        return [command[0], "--no-daemon", *command[1:]]
+    return command
 
 
 def retryable(returncode, tail, elapsed):
@@ -112,6 +132,7 @@ def main():
     if not command:
         print("Usage: codex-startup /absolute/path/to/codex [arguments...]", file=sys.stderr)
         return 2
+    command = socket_safe_command(command)
     attempts = attempt_limit()
     if (
         sys.platform != "linux"

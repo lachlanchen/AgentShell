@@ -1,4 +1,18 @@
-# Codex workspace-routing startup timeout
+# Codex startup: routing timeouts and long socket paths
+
+## Codex 0.157: `path must be shorter than SUN_LEN`
+
+Named accounts may have a long `CODEX_HOME`, for example:
+
+```text
+/home/lachlan/.local/share/agentshell/profiles/company/codex-shared-home/app-server-control/app-server-control.sock
+```
+
+Linux requires this Unix-domain socket pathname to fit in 108 bytes including its terminating NUL. Codex 0.157 resolves symlinks before choosing its control socket, so setting `CODEX_HOME` through a short `~/.as` alias alone is insufficient.
+
+The installed startup helper measures the resolved path in bytes. For supported local interactive named-account launches whose path is 108 bytes or longer, it adds Codex's `--no-daemon` option. This starts the local session without the shared background server. It does not move profiles, modify credentials or history, kill other sessions, or stop existing daemons. Explicit `--no-daemon` is not duplicated. Login, noninteractive subcommands and explicitly remote launches retain their arguments.
+
+Keep using `codex` and `codexr`. If diagnosing an unintegrated native invocation, the immediate workaround is `codex --no-daemon resume`. This addresses socket startup only, not a 401 or an expired login. The account-routing timeout retry below remains separately bounded.
 
 ## Symptom and diagnosis
 

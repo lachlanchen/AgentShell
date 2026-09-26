@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 
 LAUNCHER = Path(__file__).resolve().parents[1] / "bin" / "codex-startup"
@@ -49,6 +50,27 @@ if mode != "success" and not (mode == "transient" and count > 0):
 
 
 class ClassificationTests(unittest.TestCase):
+    def test_long_profile_socket_uses_no_daemon(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            long_home = root / ("profile-" + "a" * 90)
+            long_home.mkdir()
+            alias = root / "s"
+            alias.symlink_to(long_home, target_is_directory=True)
+            with patch.dict(os.environ, {"AGENT_SHELL_ACCOUNT": "company", "CODEX_HOME": str(alias)}):
+                with patch.object(sys, "platform", "linux"):
+                    for args in ([], ["resume", "session-id", "--cd", "/a directory"], ["fork", "--last"]):
+                        command = ["codex", *args]
+                        self.assertEqual(startup.socket_safe_command(command), ["codex", "--no-daemon", *command[1:]])
+                    for args in (["login"], ["exec", "hello"], ["--remote", "unix:///tmp/server"], ["--no-daemon", "resume"]):
+                        self.assertEqual(startup.socket_safe_command(["codex", *args]), ["codex", *args])
+                with patch.object(sys, "platform", "darwin"):
+                    self.assertEqual(startup.socket_safe_command(["codex"]), ["codex"])
+            with patch.dict(os.environ, {"AGENT_SHELL_ACCOUNT": "company", "CODEX_HOME": str(root)}):
+                self.assertEqual(startup.socket_safe_command(["codex"]), ["codex"])
+            with patch.dict(os.environ, {"AGENT_SHELL_ACCOUNT": "", "CODEX_HOME": str(alias)}):
+                self.assertEqual(startup.socket_safe_command(["codex"]), ["codex"])
+
     def test_arguments(self):
         for arguments in (
             [], ["resume", "thread-id"], ["fork", "--last"],
