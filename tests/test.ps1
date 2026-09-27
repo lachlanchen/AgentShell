@@ -577,6 +577,57 @@ exit `$LASTEXITCODE
     Assert-AccountEnvironment $invocation 'personal' $privateSqliteHome
 
     Assert-PathEqual $workDirectory (Get-Location).Path 'all profile launches must preserve caller cwd'
+    # Activation switches this process, cleans custom profile variables, and
+    # restores only AgentShell-owned values rather than later Conda changes.
+    $switchPid = $PID
+    $switchPath = $env:PATH
+    $switchAccount = $env:AGENT_SHELL_ACCOUNT
+    $switchKey = $env:OPENAI_API_KEY
+    $switchConda = $env:CONDA_PREFIX
+    $switchPrompt = [string](prompt)
+    try {
+        agentshell personal
+        Assert-Equal $switchPid $PID 'activation must retain process id'
+        Assert-Equal 'personal' $env:AGENT_SHELL_ACCOUNT 'activate personal'
+        Assert-Equal 'selected account only' $env:AGENT_TEST_PROFILE_ONLY 'load profile env'
+        Assert-Equal $null $env:OPENAI_API_KEY 'clear inherited auth'
+        . $helperPath
+        $badSwitchFailed = $false
+        try { agentshell '../invalid' } catch { $badSwitchFailed = $true }
+        Assert-True $badSwitchFailed 'invalid switch must fail'
+        Assert-Equal 'personal' $env:AGENT_SHELL_ACCOUNT 'failed switch retains active profile'
+        Assert-Equal 'selected account only' $env:AGENT_TEST_PROFILE_ONLY 'failed switch retains custom env'
+        agentshell --account workstation -- codex --version | Out-Null
+        Assert-Equal 'personal' $env:AGENT_SHELL_ACCOUNT 'one-shot retains active profile'
+        $env:CONDA_PREFIX = Join-Path $testRoot 'Conda changed'
+        $env:PATH = $env:CONDA_PREFIX + ';' + $env:PATH
+        $changedPath = $env:PATH
+        foreach ($account in @('workstation', 'personal', 'workstation')) {
+            agentshell $account
+            Assert-Equal $switchPid $PID 'switch must retain process id'
+            Assert-Equal $account $env:AGENT_SHELL_ACCOUNT 'switch account'
+            Assert-Equal 1 ([regex]::Matches([string](prompt), '\[agent:')).Count 'one prompt prefix'
+        }
+        Assert-Equal $null $env:AGENT_TEST_PROFILE_ONLY 'old profile custom variable removed'
+        agentshell deactivate
+        Assert-Equal $switchAccount $env:AGENT_SHELL_ACCOUNT 'restore account'
+        Assert-Equal $switchKey $env:OPENAI_API_KEY 'restore original auth'
+        Assert-Equal $switchPrompt ([string](prompt)) 'restore prompt'
+        Assert-Equal $changedPath $env:PATH 'retain later PATH change'
+        Assert-Equal (Join-Path $testRoot 'Conda changed') $env:CONDA_PREFIX 'retain later Conda switch'
+        Assert-PathEqual $workDirectory (Get-Location).Path 'switch retains cwd'
+        agentshell --account=personal
+        agentshell activate workstation
+        agentshell deactivate
+        agentshell deactivate
+        agentshell alpha
+        agentshell default
+        Assert-True ([string]::IsNullOrWhiteSpace($env:AGENT_SHELL_ACCOUNT)) 'default removes selected account'
+        Assert-PathEqual $env:CODEX_HOME $baseCodexHome 'default uses ordinary Codex home'
+    } finally {
+        $env:PATH = $switchPath
+        $env:CONDA_PREFIX = $switchConda
+    }
     Write-Host 'AgentShell Windows PowerShell 5.1 tests passed.'
 }
 finally {

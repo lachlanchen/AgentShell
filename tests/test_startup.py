@@ -50,6 +50,13 @@ if mode != "success" and not (mode == "transient" and count > 0):
 
 
 class ClassificationTests(unittest.TestCase):
+    def test_explicit_fresh_backend_policy_includes_ordinary_codex(self):
+        with patch.dict(os.environ, {"AGENT_SHELL_ACCOUNT": "", "AGENT_SHELL_CODEX_DAEMON": "off"}):
+            for args in ([], ["resume", "uuid"], ["fork", "--last"]):
+                self.assertEqual(startup.socket_safe_command(["codex", *args]), ["codex", "--no-daemon", *args])
+            for args in (["login"], ["logout"], ["agents"], ["exec", "task"], ["--remote", "ws://host"], ["--no-daemon"]):
+                self.assertEqual(startup.socket_safe_command(["codex", *args]), ["codex", *args])
+
     def test_long_profile_socket_uses_no_daemon(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

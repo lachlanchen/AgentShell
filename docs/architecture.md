@@ -2,7 +2,7 @@
 
 ## Isolation model
 
-AgentShell does not change the OS user, `HOME`, or `USERPROFILE`, and does not create a container. It exports provider-specific state roots into one child process:
+AgentShell does not change the OS user, `HOME`, or `USERPROFILE`, and does not create a container. It exports provider-specific state roots into the activated shell or a one-shot child process:
 
 | Provider | Isolated variable | Profile location |
 |---|---|---|
@@ -37,7 +37,13 @@ The default data roots are platform-specific but contain the same profile layout
 | Bash | `${XDG_DATA_HOME:-$HOME/.local/share}/agentshell` | `$HOME/.codex` |
 | Windows PowerShell | `%LOCALAPPDATA%\AgentShell` | `$HOME\.codex` |
 
-`AGENT_SHELL_HOME` can select a different AgentShell data root when required.
+`AGENT_SHELL_HOME` can select a different AgentShell data root when required. On
+Linux, a `$HOME/.as` symlink that resolves to the default AgentShell data root
+is also recognized as a short lexical alias without moving profile data. This
+alone does **not** fix Codex 0.157's socket limit: Codex canonicalizes the home.
+The Linux startup helper checks the resolved control-socket path and adds
+`--no-daemon` to supported local interactive launches if it reaches 108 bytes.
+Login, automation, explicitly remote launches and running sessions are unchanged.
 `AGENT_SHELL_SHARED_CODEX_SQLITE_HOME` selects the shared base, and the rollout tree follows it by default. Set `AGENT_SHELL_SHARED_CODEX_HOME` only when the shared Codex files intentionally live at a different path.
 
 ## What is shared
@@ -73,9 +79,21 @@ That option reduces login isolation and should be used knowingly.
 
 ## Shell integration
 
+`agentshell default` explicitly selects the ordinary Codex home; `deactivate`
+restores the previous shell snapshot. The optional workstation wrapper selects
+a fresh backend for supported local interactive commands to avoid retained
+daemon identity after changing the default login. `AGENT_SHELL_CODEX_DAEMON`
+selects `off`, `auto` (socket-length fallback), or `on` (native behavior).
+This never moves credentials or stops an existing daemon.
+See [the incident and tradeoff](ordinary-login-and-daemons.md).
+
 The Bash installer adds a guarded source line to `.bashrc`; the Windows installer backs up the active Windows PowerShell profile and adds one marked, guarded dot-source block. Both integrations intercept only a leading AgentShell `--account` or `--project` option. An ordinary `codex`, `codexr`, or `codexmv` invocation is passed to the pre-existing command path.
 
-`agentshell ACCOUNT` starts a child Bash or PowerShell process with the selected profile environment. A child process cannot mutate its parent, so leaving it with `exit` restores the ordinary terminal environment. The child's working directory is the caller's current real directory.
+With the integration sourced, `agentshell ACCOUNT` (or `agentshell activate ACCOUNT`) changes the current shell's account without another Bash/PowerShell process. Repeated switches replace the account instead of stacking shells. `agentshell deactivate` restores the pre-activation values, including inherited credentials; only variables owned by activation are restored, and subsequent user changes such as Conda's PATH are retained. CWD and the OS home identity stay unchanged. Reloading the integration preserves the saved environment.
+
+Bash prepares an exported-environment delta in a child, sends NUL-delimited records, validates them, and applies scalar values without `eval`. A completion marker prevents partial or failed preparation from changing the caller. PowerShell applies profile setup with an environment snapshot and restores the previous environment on failure. Neither implementation stores credentials on disk for deactivation.
+
+One-shot `agentshell ACCOUNT -- COMMAND` still runs in a child and leaves the caller's account unchanged. Without shell integration, the standalone executable retains its child-shell behavior; `command agentshell ACCOUNT` deliberately selects that behavior on Bash. Previously nested shells cannot be unwound automatically without exiting those processes. Sourcing the new integration prevents further nesting, but deactivation can only restore the environment that existed when this integration first activated.
 
 ## Why not change HOME or USERPROFILE
 

@@ -51,6 +51,7 @@ AgentShell - separate AI CLI accounts by named terminal profile
 
 Usage:
   agentshell ACCOUNT
+  agentshell activate ACCOUNT | deactivate | default    (with shell integration)
   agentshell --account ACCOUNT [-- COMMAND [ARG...]]
   agentshell -v | status [ACCOUNT]
   agent-run --account ACCOUNT TOOL [ARG...]
@@ -818,6 +819,9 @@ function Invoke-AgentShellMainCommand {
     param([object[]]$Arguments = @())
     if ($Arguments.Count -eq 0) { Show-AgentShellUsage; return }
     $first = [string]$Arguments[0]
+    if ($first -in @('activate', 'deactivate', 'default')) {
+        Throw-AgentShellError 'activate/deactivate/default requires shell integration; reload your PowerShell profile'
+    }
     if ($first -in @('-h', '--help', 'help')) { Show-AgentShellUsage; return }
     if ($first -in @('-v', '--version')) {
         $name = if ($Arguments.Count -gt 1) { [string]$Arguments[1] } else { '' }

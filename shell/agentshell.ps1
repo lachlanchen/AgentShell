@@ -172,18 +172,114 @@ foreach ($provider in @('claude', 'gemini', 'copilot')) {
 }
 
 function global:agentshell {
-    Invoke-AgentShellRuntimeFromProfile 'agentshell' @($args)
+    $arguments = @($args)
+    $first = if ($arguments.Count -gt 0) { [string]$arguments[0] } else { '' }
+    if ($first -eq 'default') {
+        if ($arguments.Count -ne 1) { Throw-AgentShellError 'Usage: agentshell default' }
+        Restore-AgentShellActivation
+        if (-not [string]::IsNullOrWhiteSpace($env:AGENT_SHELL_ACCOUNT)) {
+            foreach ($name in @('CODEX_API_KEY','CODEX_ACCESS_TOKEN','OPENAI_API_KEY',
+                'ANTHROPIC_API_KEY','ANTHROPIC_AUTH_TOKEN','CLAUDE_CODE_OAUTH_TOKEN',
+                'GEMINI_API_KEY','GOOGLE_API_KEY','GOOGLE_APPLICATION_CREDENTIALS',
+                'COPILOT_GITHUB_TOKEN','GH_TOKEN','GITHUB_TOKEN')) {
+                [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+            }
+        }
+        foreach ($name in @('AGENT_SHELL_ACCOUNT','AGENT_SHELL_PROFILE_ROOT','AGENT_SHELL_PROFILE_ENV',
+            'AGENT_SHELL_CODEX_HISTORY_MODE','AGENT_SHELL_CODEX_SQLITE_HOME','AGENT_SHELL_CODEX_HOME',
+            'CODEX_SQLITE_HOME','CODEX_SESSION_ID','CODEX_THREAD_ID','CODEX_CI',
+            'CLAUDE_CONFIG_DIR','GEMINI_CLI_HOME','COPILOT_HOME','COPILOT_CACHE_HOME')) {
+            [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+        }
+        $env:CODEX_HOME = if ($env:AGENT_SHELL_BASE_CODEX_HOME) { $env:AGENT_SHELL_BASE_CODEX_HOME } else { Join-Path $HOME '.codex' }
+        $global:AgentShellActivationState = $null
+        $global:LASTEXITCODE = 0
+        [Console]::Error.WriteLine("AgentShell: ordinary Codex at $env:CODEX_HOME (current shell)")
+        return
+    }
+    if ($first -eq 'deactivate') {
+        if ($arguments.Count -ne 1) { Throw-AgentShellError 'Usage: agentshell deactivate' }
+        Restore-AgentShellActivation
+        $global:AgentShellActivationState = $null
+        $global:LASTEXITCODE = 0
+        return
+    }
+    if ($first -eq 'activate') {
+        if ($arguments.Count -ne 2) { Throw-AgentShellError 'Usage: agentshell activate ACCOUNT' }
+        Set-AgentShellActiveAccount ([string]$arguments[1])
+        return
+    }
+    if ($first -in @('', '-h', '--help', 'help', '-v', '--version', 'status', 'profile', 'run')) {
+        Invoke-AgentShellRuntimeFromProfile 'agentshell' $arguments
+        return
+    }
+    $parsed = Split-AgentShellAccountOption $arguments
+    $account = $parsed.Account
+    $remaining = @($parsed.Remaining)
+    if (-not $parsed.WasSpecified) {
+        $account = $first
+        $remaining = @(if ($arguments.Count -gt 1) { $arguments[1..($arguments.Count - 1)] })
+    }
+    if ($remaining.Count -eq 1 -and $remaining[0] -eq '--') { $remaining = @() }
+    if ($remaining.Count -eq 0) {
+        Set-AgentShellActiveAccount $account
+    } else {
+        Invoke-AgentShellRuntimeFromProfile 'agentshell' $arguments
+    }
+}
+
+if ($null -eq (Get-Variable AgentShellActivationState -Scope Global -ErrorAction SilentlyContinue)) {
+    $global:AgentShellActivationState = $null
+}
+
+function Restore-AgentShellActivation {
+    $state = $global:AgentShellActivationState
+    if ($null -eq $state) { return }
+    foreach ($name in $state.Changed) {
+        $current = [Environment]::GetEnvironmentVariable($name, 'Process')
+        # Keep subsequent user changes such as conda's PATH update.
+        if ($current -cne $state.Applied[$name]) { continue }
+        [Environment]::SetEnvironmentVariable($name, $state.Before[$name], 'Process')
+    }
+}
+
+function Set-AgentShellActiveAccount {
+    param([Parameter(Mandatory = $true)][string]$Account)
+    $current = Save-AgentShellEnvironment
+    $location = Get-Location
+    try {
+        Restore-AgentShellActivation
+        $before = Save-AgentShellEnvironment
+        [void](Set-AgentShellProfileEnvironment $Account)
+        # Account environment files cannot change the caller's home identity.
+        foreach ($name in @('HOME', 'USERPROFILE')) {
+            [Environment]::SetEnvironmentVariable($name, $before[$name], 'Process')
+        }
+        $after = Save-AgentShellEnvironment
+        $changed = @(@($before.Keys) + @($after.Keys) | Sort-Object -Unique |
+            Where-Object { $before[$_] -cne $after[$_] })
+        $global:AgentShellActivationState = [PSCustomObject]@{
+            Before = $before
+            Applied = $after
+            Changed = $changed
+        }
+        $global:LASTEXITCODE = 0
+        [Console]::Error.WriteLine("AgentShell account $Account (current shell)")
+    } catch {
+        Restore-AgentShellEnvironment $current
+        throw
+    } finally {
+        Set-Location -LiteralPath $location.Path
+    }
 }
 
 if ($null -eq (Get-Command cr -ErrorAction SilentlyContinue)) {
     Set-Alias -Name cr -Value codexr -Scope Global
 }
 
-if (-not [string]::IsNullOrWhiteSpace($env:AGENT_SHELL_ACCOUNT)) {
-    function global:prompt {
+function global:prompt {
         $prefix = if ([string]::IsNullOrWhiteSpace($env:AGENT_SHELL_ACCOUNT)) { '' } else { "[agent:$env:AGENT_SHELL_ACCOUNT] " }
         $base = $global:AgentShellPowerShellState.BasePrompt
-        if ($null -ne $base) { return $prefix + (& $base) }
+        if ($null -ne $base) { return $prefix + ((& $base) -replace '\[agent:[A-Za-z0-9._-]+\] ', '') }
         return $prefix + 'PS ' + (Get-Location).Path + '> '
-    }
 }

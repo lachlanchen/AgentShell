@@ -2,6 +2,7 @@
 
 import os
 import re
+import runpy
 import selectors
 import signal
 import subprocess
@@ -66,10 +67,16 @@ def socket_safe_command(command):
     """Codex 0.157 resolves CODEX_HOME before connecting to its Unix socket."""
     if (
         sys.platform != "linux"
-        or not os.environ.get("AGENT_SHELL_ACCOUNT")
         or not interactive_arguments(command[1:])
         or "--no-daemon" in command[1:]
     ):
+        return command
+    # Explicit local policy for machines where a persistent backend still
+    # holds an old login. No daemon is stopped, no credentials are copied.
+    policy = os.environ.get("AGENT_SHELL_CODEX_DAEMON", "auto")
+    if policy == "off":
+        return [command[0], "--no-daemon", *command[1:]]
+    if policy not in {"auto", "off"} or not os.environ.get("AGENT_SHELL_ACCOUNT"):
         return command
     codex_home = os.environ.get("CODEX_HOME")
     if not codex_home:
@@ -132,6 +139,19 @@ def main():
     if not command:
         print("Usage: codex-startup /absolute/path/to/codex [arguments...]", file=sys.stderr)
         return 2
+    # Wrapper-only option. Never search prompts or native option values for it.
+    takeover_flags = {"--kill", "--where", "--close-other", "--as-close-other"}
+    if (len(command) > 1 and command[1] in takeover_flags) or (
+        len(command) > 2 and command[1] == "resume" and command[2] in takeover_flags
+    ):
+        helper = os.path.join(os.path.dirname(os.path.abspath(__file__)), "codex_takeover.py")
+        try:
+            command = runpy.run_path(helper)["prepare_command"](command)
+            if command is None:
+                return 0
+        except (RuntimeError, OSError) as error:
+            print(f"AgentShell takeover: {error}", file=sys.stderr)
+            return 2
     command = socket_safe_command(command)
     attempts = attempt_limit()
     if (

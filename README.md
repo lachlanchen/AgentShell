@@ -43,7 +43,11 @@ codex --account personal login
 agent-profile history personal shared
 ```
 
-Inside `agentshell personal`, plain `codex`, `codexr`, and `codexmv` all use that account. Run `exit` when finished.
+After `agentshell personal`, plain `codex`, `codexr`, and `codexmv` all use that account. With shell integration loaded, `agentshell company` switches the same shell without nesting. Run `agentshell deactivate` to restore its previous environment; `exit` still closes the shell.
+
+Use `agentshell default` to explicitly return to ordinary Codex at `~/.codex`,
+including from an older inherited account shell. See
+[ordinary login and stale daemon recovery](docs/ordinary-login-and-daemons.md).
 
 | Donate | PayPal | Stripe |
 | --- | --- | --- |
@@ -67,6 +71,8 @@ agent-desktop lab
 On Linux/WSL, named-account CLI launches now retry **only** the exact `account/read` workspace-routing timeout during TUI bootstrap: at most three attempts, keeping the same account, directory, arguments, and selected session. Healthy launches have no extra network preflight. Login, automation, other errors, and successful sessions are not retried.
 
 Use your usual `agentshell company` → `codexr`, or `codex --account lab`. Check the selected profile with `agentshell -v`. No new login is required. [Cause, safeguards, workstation-wrapper integration, and opt-out](docs/codex-startup-retry.md).
+
+For Codex 0.157's Linux `path must be shorter than SUN_LEN` error, the same helper checks the **resolved** account-home socket path. Supported local interactive launches automatically use `--no-daemon` when that path cannot fit. Account credentials and session files stay in place; existing daemons are not stopped. A short symlink alone is insufficient because Codex resolves it.
 
 ## One folder, several identities
 
@@ -148,7 +154,7 @@ cd /path/to/project                 # Bash
 Set-Location C:\path\to\project    # Windows PowerShell
 ```
 
-Then enter the account shell:
+Then select an account in the current shell:
 
 ```bash
 agentshell lab
@@ -157,7 +163,8 @@ agentshell lab
 agentshell -v
 codex
 codexr
-exit
+agentshell company                 # switch, without another shell
+agentshell deactivate
 ```
 
 Or use generated commands:
@@ -169,6 +176,27 @@ agent-company-codexmv /old/path /new/path
 ```
 
 The AgentShell `--account` option must appear first. Plain `codex`, `codexr`, and `codexmv` retain their existing behavior.
+
+## Resume a session open elsewhere (Linux)
+
+On the workstation wrapper, use `codexr --close-other` to select a session and
+close its other opening before resuming. Bare `codex --close-other` opens the
+same picker. The namespaced alias is `--as-close-other`; native `-f` and
+`--force` are not intercepted.
+
+```bash
+codexr --where                    # inspect the selected session's owner
+codexr --kill                     # close its eligible owner, then resume
+codex --as-close-other resume SESSION_UUID
+codexr --account personal --close-other
+codexmv --kill --latest /old/project /new/project
+```
+
+This is explicit permission to interrupt the selected session's other opening.
+Only a verified, same-user, single-session owner is closed with SIGTERM.
+A desktop-owned session may require closing that account's desktop app.
+Shared daemons and owners holding other sessions are refused. No session, lock
+file, or database is deleted. [Usage, boundaries, and installation](docs/session-takeover.md).
 
 ## Private credentials, selectable history
 

@@ -16,6 +16,13 @@ Profile names are labels chosen locally. They may contain letters, numbers, dots
 
 ## The important distinction
 
+To explicitly leave an account shell, use `agentshell default`, then `codex`
+or `codexr`. This uses the ordinary Codex login without logging any other
+account out. [Commands and stale-backend diagnosis](ordinary-login-and-daemons.md).
+For a conversation open elsewhere, `codexr --where` identifies its owner;
+`codexr --kill` performs a checked, graceful takeover before resuming.
+See [takeover limits](session-takeover.md).
+
 AgentShell's `--account` selects an authentication/state profile:
 
 ```bash
@@ -87,7 +94,7 @@ agent-profile history personal shared
 
 Reload the integration first with `source ~/.bashrc` on Bash or `. $PROFILE` on PowerShell.
 
-After login, return to the three-command workflow. Run `exit` when you want to leave the named AgentShell terminal.
+After login, return to the three-command workflow. Run `agentshell deactivate` to restore the pre-activation environment without closing the terminal. Another `agentshell ACCOUNT` switches accounts in place.
 
 One-shot commands remain available when a dedicated shell is not wanted:
 
@@ -322,13 +329,17 @@ codexr
 codexmv
 ```
 
-The working directory remains unchanged. On Windows, `agentshell ACCOUNT` starts a nested PowerShell with the selected account environment; on Bash it starts a nested Bash shell. Exit either dedicated shell with:
+The working directory and Conda environment remain unchanged. With shell integration loaded, both Bash and PowerShell switch the current shell instead of nesting another shell:
 
 ```bash
-exit
+agentshell company
+agentshell personal
+agentshell deactivate
 ```
 
 Open another terminal and run `agentshell lab` to use the lab login in the same repository.
+
+`agentshell deactivate` restores the environment before the first activation, not the previously selected account. The standalone executable still starts a child shell when integration is not loaded. Old nested shells remain nested until you exit them manually or open a fresh terminal; reloading the helper prevents new nesting and does not log you out.
 
 ### Generated account commands
 
@@ -773,7 +784,7 @@ codexr --account personal --all
 # Dedicated terminal
 agentshell personal
 agentshell -v
-exit
+agentshell deactivate
 
 # Moved project sessions
 codexmv --account personal /old/path /new/path
@@ -814,7 +825,7 @@ codexr --account personal --all
 # Dedicated terminal
 agentshell personal
 agentshell -v
-exit
+agentshell deactivate
 
 # Moved project sessions
 codexmv --account personal "C:\old path" "D:\new path"

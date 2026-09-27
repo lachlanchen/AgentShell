@@ -18,6 +18,8 @@ jobs:
         run: bash tests/test.sh
       - name: Verify Linux Codex startup retry boundaries
         run: python3 -m unittest discover -s tests -p test_startup.py -v
+      - name: Verify session takeover and workstation wrapper
+        run: AGENT_SHELL_TEST_WORKSTATION_WRAPPER="$PWD/contrib/workstation/codex_wrapper.sh" python3 -m unittest discover -s tests -p test_takeover.py -v
 
   powershell-5-1:
     runs-on: windows-latest

@@ -33,7 +33,12 @@ cat > "$test_root/native/codex" <<'EOF'
   printf 'sqlite_home=%s\n' "${CODEX_SQLITE_HOME:-}"
   printf 'account=%s\n' "${AGENT_SHELL_ACCOUNT:-}"
   printf 'openai_api_key=%s\n' "${OPENAI_API_KEY-unset}"
-  for argument in "$@"; do printf 'arg=%s\n' "$argument"; done
+  # Long temporary paths may require the startup helper's transport flag.
+  # Socket fallback itself is covered separately in test_startup.py.
+  for argument in "$@"; do
+    [ "$argument" = --no-daemon ] && continue
+    printf 'arg=%s\n' "$argument"
+  done
 } > "$AGENT_TEST_OUTPUT"
 printf 'stub codex\n'
 EOF
@@ -45,6 +50,22 @@ for name in agentshell agent-run agent-profile agent-codex agent-codexr agent-co
 done
 export PATH="$AGENT_SHELL_BIN_DIR:$test_root/native:/usr/bin:/bin"
 export OPENAI_API_KEY='inherited-key-must-be-cleared'
+
+# A validated short alias is selected before profile paths are calculated.
+short_home="$test_root/short-home"
+mkdir -p "$short_home/.local/share/agentshell"
+ln -s ".local/share/agentshell" "$short_home/.as"
+(
+  export HOME="$short_home"
+  unset AGENT_SHELL_HOME XDG_DATA_HOME AGENT_SHELL_ACCOUNT \
+    AGENT_SHELL_PROFILE_ROOT AGENT_SHELL_PROFILE_ENV \
+    AGENT_SHELL_CODEX_HISTORY_MODE AGENT_SHELL_CODEX_SQLITE_HOME \
+    AGENT_SHELL_CODEX_HOME CODEX_HOME CODEX_SQLITE_HOME
+  agent-profile create shortpath >/dev/null
+  agent-shortpath-codex --version >/dev/null
+  grep -q "^codex_home=$short_home/.as/profiles/shortpath/codex-shared-home$" "$AGENT_TEST_OUTPUT"
+  grep -q "^sqlite_home=$short_home/.codex$" "$AGENT_TEST_OUTPUT"
+)
 
 # New accounts expose workstation history while retaining their own login.
 agent-profile create workstation >/dev/null
@@ -207,5 +228,78 @@ if agent-profile create '../invalid' >/dev/null 2>&1; then
   printf 'invalid profile name was unexpectedly accepted\n' >&2
   exit 1
 fi
+
+# Switching is in-process, clears the previous profile's custom environment,
+# preserves Conda changes, and rolls back failed activation.
+(
+  test_pid="$BASHPID"
+  test_depth="$SHLVL"
+  test_pwd="$PWD"
+  test_path="$PATH"
+  PS1='(base) test> '
+  CONDA_PREFIX=/test/conda/base
+  export CONDA_PREFIX
+  test_prompt="$PS1"
+  unset AGENT_TEST_PRIVATE AGENT_TEST_LITERAL
+  test_literal=$'spaces\nquotes " and literal $(touch /never-run) `code`'
+  printf 'export AGENT_TEST_PRIVATE=alpha-only\nexport AGENT_TEST_LITERAL=%q\n' "$test_literal" >> "$profile/env.sh"
+  agentshell alpha
+  test "$BASHPID" = "$test_pid" && test "$SHLVL" = "$test_depth"
+  test "$PWD" = "$test_pwd"
+  test "$AGENT_SHELL_ACCOUNT" = alpha
+  test "$AGENT_TEST_PRIVATE" = alpha-only
+  test "$AGENT_TEST_LITERAL" = "$test_literal"
+  test "${OPENAI_API_KEY+x}" != x
+  test "$CONDA_PREFIX" = /test/conda/base
+  test "$PS1" = "[agent:alpha] $test_prompt"
+  # Reloading the helper must retain the deactivation snapshot.
+  . "$repo_root/shell/agentshell.bash"
+  # A one-shot launch must leave the selected shell profile unchanged.
+  agentshell --account beta -- codex --version >/dev/null
+  test "$AGENT_SHELL_ACCOUNT" = alpha
+  test "$AGENT_TEST_PRIVATE" = alpha-only
+  if agentshell '../invalid'; then exit 1; fi
+  test "$AGENT_SHELL_ACCOUNT" = alpha
+  agent-profile create broken >/dev/null
+  printf 'return 7\n' >> "$AGENT_SHELL_HOME/profiles/broken/env.sh"
+  if agentshell broken; then exit 1; fi
+  test "$AGENT_SHELL_ACCOUNT" = alpha
+  test "$AGENT_TEST_LITERAL" = "$test_literal"
+  export CONDA_PREFIX=/test/conda/changed
+  export PATH="/test/conda/changed/bin:$PATH"
+  for selected in beta alpha beta; do
+    agentshell "$selected"
+    test "$BASHPID" = "$test_pid" && test "$SHLVL" = "$test_depth"
+    test "$AGENT_SHELL_ACCOUNT" = "$selected"
+    test "$PS1" = "[agent:$selected] $test_prompt"
+  done
+  test "${AGENT_TEST_PRIVATE+x}" != x
+  test "${AGENT_TEST_LITERAL+x}" != x
+  agentshell deactivate
+  test "${AGENT_SHELL_ACCOUNT+x}" != x
+  test "$OPENAI_API_KEY" = inherited-key-must-be-cleared
+  test "$PS1" = "$test_prompt"
+  test "$CONDA_PREFIX" = /test/conda/changed
+  test "$PATH" = "/test/conda/changed/bin:$test_path"
+  test "$PWD" = "$test_pwd"
+  agentshell --account=alpha
+  agentshell activate beta
+  agentshell deactivate
+  agentshell deactivate
+  agentshell alpha
+  agentshell default
+  test "${AGENT_SHELL_ACCOUNT+x}" != x
+  test "$CODEX_HOME" = "${AGENT_SHELL_BASE_CODEX_HOME:-$HOME/.codex}"
+  test "$OPENAI_API_KEY" = inherited-key-must-be-cleared
+  # A shell inherited from an older nested AgentShell has no snapshot.
+  export AGENT_SHELL_ACCOUNT=alpha CODEX_HOME=/old/account CODEX_SQLITE_HOME=/old/history
+  export OPENAI_API_KEY=profile-key
+  agentshell default
+  test "${AGENT_SHELL_ACCOUNT+x}" != x
+  test "${CODEX_SQLITE_HOME+x}" != x
+  test "${OPENAI_API_KEY+x}" != x
+  test "$CONDA_PREFIX" = /test/conda/changed
+  test "$PWD" = "$test_pwd"
+)
 
 printf 'AgentShell tests passed.\n'

@@ -6,7 +6,18 @@ set -euo pipefail
 AGENT_SHELL_VERSION="0.5.0"
 agent_shell_program="$(basename -- "$0")"
 agent_shell_self="$(readlink -f -- "${BASH_SOURCE[0]}")"
-agent_shell_data_home="${AGENT_SHELL_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/agentshell}"
+agent_shell_default_data_home="${XDG_DATA_HOME:-$HOME/.local/share}/agentshell"
+agent_shell_short_data_home="$HOME/.as"
+
+# Preserve a deliberately configured short data alias. Codex canonicalizes it,
+# so the startup helper still checks the resolved Unix socket length. Only
+# trust the alias when it resolves to the normal AgentShell data root.
+if [ -z "${AGENT_SHELL_HOME:-}" ] &&
+   [ -L "$agent_shell_short_data_home" ] &&
+   [ "$(readlink -f -- "$agent_shell_short_data_home")" = "$(readlink -f -- "$agent_shell_default_data_home")" ]; then
+  export AGENT_SHELL_HOME="$agent_shell_short_data_home"
+fi
+agent_shell_data_home="${AGENT_SHELL_HOME:-$agent_shell_default_data_home}"
 agent_shell_profiles_dir="$agent_shell_data_home/profiles"
 agent_shell_bin_dir="${AGENT_SHELL_BIN_DIR:-$HOME/.local/bin}"
 agent_shell_profile_tools=(codex codexr codexmv claude gemini copilot)
@@ -22,6 +33,7 @@ AgentShell — separate AI CLI accounts by named terminal profile
 
 Usage:
   agentshell ACCOUNT
+  agentshell activate ACCOUNT | deactivate | default    (with shell integration)
   agentshell --account ACCOUNT [-- COMMAND [ARG...]]
   agentshell -v | status [ACCOUNT]
   agent-run --account ACCOUNT TOOL [ARG...]
@@ -411,6 +423,32 @@ agent_shell_command_path() {
   printf '%s\n' "$path"
 }
 
+# Emit an environment delta for the sourced Bash integration. NUL framing
+# keeps multiline values literal; no credential is written to a temporary file.
+agent_shell_emit_environment() {
+  local __ags_name
+  local -A __ags_before=() __ags_after=()
+  while IFS= read -r __ags_name; do
+    __ags_before["$__ags_name"]="${!__ags_name}"
+  done < <(compgen -e)
+  agent_shell_activate_profile "$1" >&2
+  while IFS= read -r __ags_name; do
+    __ags_after["$__ags_name"]="${!__ags_name}"
+  done < <(compgen -e)
+  for __ags_name in "${!__ags_before[@]}" "${!__ags_after[@]}"; do
+    case "$__ags_name" in
+      HOME|USERPROFILE|PWD|OLDPWD|SHLVL|_|PS1|SHELLOPTS|BASHOPTS|__ags_*|__agentshell_*) continue ;;
+    esac
+    if [[ ! -v __ags_after[$__ags_name] ]]; then
+      printf 'unset\0%s\0\0' "$__ags_name"
+    elif [[ ! -v __ags_before[$__ags_name] ]] ||
+         [ "${__ags_before[$__ags_name]}" != "${__ags_after[$__ags_name]}" ]; then
+      printf 'export\0%s\0%s\0' "$__ags_name" "${__ags_after[$__ags_name]}"
+    fi
+  done
+  printf 'done\0\0\0'
+}
+
 agent_shell_run_tool() {
   local name="$1" tool="$2" command_path wrapper
   shift 2
@@ -704,6 +742,10 @@ agent_shell_profile_main() {
       agent_shell_create_profile "$name"
       agent_shell_codex_home "$name" "${3:-}"
       ;;
+    shell-env)
+      [ "$#" -eq 2 ] && [ -n "$name" ] || agent_shell_die 'profile shell-env requires ACCOUNT'
+      agent_shell_emit_environment "$name"
+      ;;
     status)
       [ -n "$name" ] || agent_shell_die 'profile status requires ACCOUNT'
       agent_shell_profile_status "$name" "$provider"
@@ -778,6 +820,9 @@ agent_shell_main() {
     return
   fi
   case "${1:-}" in
+    activate|deactivate|default)
+      agent_shell_die 'activate/deactivate/default requires shell integration; source ~/scripts/sourced_agent_shell.sh'
+      ;;
     -v|--version)
       shift
       agent_shell_runtime_status "${1:-}"
